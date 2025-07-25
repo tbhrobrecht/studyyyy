@@ -162,13 +162,14 @@ class LearnSimulator:
         print(f"Term: {card.term}")
         print("Choose the correct definition:")
         
-        # Create options
+        # Create options with better randomization
         correct_definition = card.definition
         wrong_definitions = self._get_random_options(correct_definition, "definition", 4)
         
-        options = [correct_definition] + wrong_definitions
-        random.shuffle(options)
-        correct_index = options.index(correct_definition) + 1
+        # Randomly place correct answer at any position (1-5)
+        correct_index = random.randint(1, 5)
+        options = wrong_definitions[:4]  # Take 4 wrong answers
+        options.insert(correct_index - 1, correct_definition)  # Insert correct at random position
         
         # Display options
         for i, option in enumerate(options, 1):
@@ -225,13 +226,14 @@ class LearnSimulator:
         print(f"Definition: {card.definition}")
         print("Choose the correct term:")
         
-        # Create options
+        # Create options with better randomization
         correct_term = card.term
         wrong_terms = self._get_random_options(correct_term, "term", 4)
         
-        options = [correct_term] + wrong_terms
-        random.shuffle(options)
-        correct_index = options.index(correct_term) + 1
+        # Randomly place correct answer at any position (1-5)
+        correct_index = random.randint(1, 5)
+        options = wrong_terms[:4]  # Take 4 wrong answers
+        options.insert(correct_index - 1, correct_term)  # Insert correct at random position
         
         # Display options
         for i, option in enumerate(options, 1):
