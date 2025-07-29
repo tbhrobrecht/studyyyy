@@ -320,12 +320,14 @@ class LearnSimulator:
                     # If hint was used, reduce score
                     correct = choice == correct_index
                     if correct and used_hint:
-                        print("✓ Correct (with hint)")
+                        print(f"✓ Correct (with hint): {choice}. {correct_definition}")
                         return "hint_correct"  # Special return value for reduced score
                     elif correct:
+                        print(f"✓ Correct: {choice}. {correct_definition}")
                         return True
                     else:
-                        print(f"✗ Incorrect! The correct answer was: {correct_index}. {correct_definition}")
+                        print(f"✗ Incorrect! You selected: {choice}. {options[choice-1]}")
+                        print(f"The correct answer was: {correct_index}. {correct_definition}")
                         return False
                 else:
                     print(f"Invalid choice. Enter 1-{len(options)}.")
@@ -384,12 +386,14 @@ class LearnSimulator:
                     # If hint was used, reduce score
                     correct = choice == correct_index
                     if correct and used_hint:
-                        print("✓ Correct (with hint)")
+                        print(f"✓ Correct (with hint): {choice}. {correct_term}")
                         return "hint_correct"  # Special return value for reduced score
                     elif correct:
+                        print(f"✓ Correct: {choice}. {correct_term}")
                         return True
                     else:
-                        print(f"✗ Incorrect! The correct answer was: {correct_index}. {correct_term}")
+                        print(f"✗ Incorrect! You selected: {choice}. {options[choice-1]}")
+                        print(f"The correct answer was: {correct_index}. {correct_term}")
                         return False
                 else:
                     print(f"Invalid choice. Enter 1-{len(options)}.")
