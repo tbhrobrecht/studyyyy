@@ -16,13 +16,17 @@ class LearnSimulator:
             with open(filepath, newline='', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
+                    # Check if formula column exists and has content
+                    formula = row.get('formula', '').strip() if row.get('formula') else None
+                    
                     cards.append(Flashcard(
                         term=row['term'],
                         definition=row['definition'],
                         ease=row.get('ease', 2.5),
                         interval=row.get('interval', 1),
                         repetitions=row.get('repetitions', 0),
-                        last_review=row.get('last_review')
+                        last_review=row.get('last_review'),
+                        formula=formula  # Add formula support
                     ))
         except FileNotFoundError:
             print(f"File not found: {filepath}")
@@ -31,11 +35,23 @@ class LearnSimulator:
 
     def save_deck(self, filepath):
         with open(filepath, 'w', newline='', encoding='utf-8') as f:
-            fieldnames = ['term', 'definition', 'ease', 'interval', 'repetitions', 'last_review']
+            # Check if any cards have formulas to determine fieldnames
+            has_formulas = any(hasattr(card, 'formula') and card.formula for card in self.cards)
+            
+            if has_formulas:
+                fieldnames = ['term', 'definition', 'formula', 'ease', 'interval', 'repetitions', 'last_review']
+            else:
+                fieldnames = ['term', 'definition', 'ease', 'interval', 'repetitions', 'last_review']
+                
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for card in self.cards:
                 writer.writerow(card.to_dict())
+
+    @property
+    def flashcards(self):
+        """Alias for cards to maintain compatibility with quiz methods"""
+        return self.cards
 
     def study_session(self):
         # Sort all cards by repetitions (lowest first) - cards with fewer repetitions need more practice
@@ -215,8 +231,21 @@ class LearnSimulator:
             if card.repetitions == 0:
                 correct_answer = self._show_card_first_time(card)
             else:
-                # Determine quiz mode based on ease factor (threshold: 3.0)
-                if card.ease < 3.0:
+                # Determine quiz mode based on ease factor and formula availability
+                has_formula = hasattr(card, 'formula') and card.formula
+                
+                if has_formula and card.ease >= 3.0:
+                    # For cards with formulas and high ease, add formula quiz mode
+                    quiz_modes = ['term_to_definition', 'definition_to_term', 'term_to_formula']
+                    quiz_mode = random.choice(quiz_modes)
+                    
+                    if quiz_mode == 'term_to_definition':
+                        correct_answer = self._quiz_term_to_definition(card)
+                    elif quiz_mode == 'definition_to_term':
+                        correct_answer = self._quiz_definition_to_term(card)
+                    else:  # term_to_formula
+                        correct_answer = self._quiz_term_to_formula(card)
+                elif card.ease < 3.0:
                     # Term to definition mode (easier)
                     correct_answer = self._quiz_term_to_definition(card)
                 else:
@@ -250,6 +279,10 @@ class LearnSimulator:
         print(f"NEW TERM")
         print(f"Term: {card.term}")
         print(f"Definition: {card.definition}")
+        
+        # Show formula if it exists
+        if hasattr(card, 'formula') and card.formula:
+            print(f"Formula: {card.formula}")
         print()
         
         while True:
@@ -266,6 +299,8 @@ class LearnSimulator:
                 print("\n" + "="*40)
                 print(f"Term: {card.term}")
                 print(f"Definition: {card.definition}")
+                if hasattr(card, 'formula') and card.formula:
+                    print(f"Formula: {card.formula}")
                 print("="*40)
             else:
                 print("Invalid input. Press SPACE to continue, 'r' to repeat, or ESC.")
@@ -290,6 +325,11 @@ class LearnSimulator:
     def _quiz_term_to_definition(self, card):
         """Quiz mode: Show term, choose correct definition"""
         print(f"Term: {card.term}")
+        
+        # Show formula if it exists
+        if hasattr(card, 'formula') and card.formula:
+            print(f"Formula: {card.formula}")
+            
         print("Choose the correct definition:")
         
         # Create options with better randomization
@@ -356,6 +396,11 @@ class LearnSimulator:
     def _quiz_definition_to_term(self, card):
         """Quiz mode: Show definition, choose correct term"""
         print(f"Definition: {card.definition}")
+        
+        # Show formula if it exists
+        if hasattr(card, 'formula') and card.formula:
+            print(f"Formula: {card.formula}")
+            
         print("Choose the correct term:")
         
         # Create options with better randomization
@@ -408,6 +453,103 @@ class LearnSimulator:
                 
                 # Update correct_index after removal
                 correct_index = options.index(correct_term) + 1
+                
+                # Redisplay options
+                print("\nHint used! Here are the remaining options:")
+                for i, option in enumerate(options, 1):
+                    print(f"{i}. {option}")
+                used_hint = True
+            elif key.lower() == b'h' and used_hint:
+                print("Hint already used for this question.")
+            else:
+                print("Invalid input. Enter 1-5, 'h' for hint, or ESC.")
+
+    def _quiz_term_to_formula(self, card):
+        """Quiz mode: Show term, choose correct formula (for cards with formulas)"""
+        if not hasattr(card, 'formula') or not card.formula:
+            # Fallback to term_to_definition if no formula
+            return self._quiz_term_to_definition(card)
+            
+        print(f"Term: {card.term}")
+        print("Choose the correct formula:")
+        
+        # Create options with formulas from other cards
+        correct_formula = card.formula
+        wrong_formulas = []
+        
+        # Get formulas from other cards
+        for other_card in self.flashcards:
+            if (other_card != card and 
+                hasattr(other_card, 'formula') and 
+                other_card.formula and 
+                other_card.formula != correct_formula):
+                wrong_formulas.append(other_card.formula)
+        
+        # If we don't have enough formula options, add some generic ones
+        generic_formulas = [
+            "Rate × Principal × Time",
+            "(Final Value - Initial Value) / Initial Value",
+            "Present Value / (1 + r)^n",
+            "Cash Flow / Required Rate of Return",
+            "Assets - Liabilities"
+        ]
+        
+        for formula in generic_formulas:
+            if formula not in wrong_formulas and formula != correct_formula:
+                wrong_formulas.append(formula)
+            if len(wrong_formulas) >= 4:
+                break
+        
+        # Ensure we have at least 4 options
+        while len(wrong_formulas) < 4:
+            wrong_formulas.append(f"Formula Option {len(wrong_formulas) + 1}")
+        
+        # Randomly place correct answer at any position (1-5)
+        correct_index = random.randint(1, 5)
+        options = wrong_formulas[:4]  # Take 4 wrong answers
+        options.insert(correct_index - 1, correct_formula)  # Insert correct at random position
+        
+        # Display options
+        for i, option in enumerate(options, 1):
+            print(f"{i}. {option}")
+        
+        # Get user input
+        used_hint = False
+        while True:
+            print("Enter choice (1-5), 'h' for hint, or ESC to stop:")
+            key = msvcrt.getch()
+            if key == b'\x1b':  # ESC key
+                print("\nSession stopped early. Saving progress...")
+                self.save_deck(self.filepath or "deck.csv")
+                return None
+            elif key in [b'1', b'2', b'3', b'4', b'5']:
+                choice = int(key.decode())
+                if choice <= len(options):
+                    # If hint was used, reduce score
+                    correct = choice == correct_index
+                    if correct and used_hint:
+                        print(f"✓ Correct (with hint): {choice}. {correct_formula}")
+                        return "hint_correct"  # Special return value for reduced score
+                    elif correct:
+                        print(f"✓ Correct: {choice}. {correct_formula}")
+                        return True
+                    else:
+                        print(f"✗ Incorrect! You selected: {choice}. {options[choice-1]}")
+                        print(f"The correct answer was: {correct_index}. {correct_formula}")
+                        return False
+                else:
+                    print(f"Invalid choice. Enter 1-{len(options)}.")
+            elif key.lower() == b'h' and not used_hint:
+                # Remove 2 wrong options randomly
+                wrong_indices = [i for i in range(len(options)) if i != (correct_index - 1)]
+                indices_to_remove = random.sample(wrong_indices, min(2, len(wrong_indices)))
+                indices_to_remove.sort(reverse=True)  # Remove from end to avoid index issues
+                
+                for idx in indices_to_remove:
+                    options.pop(idx)
+                
+                # Update correct_index after removal
+                correct_index = options.index(correct_formula) + 1
                 
                 # Redisplay options
                 print("\nHint used! Here are the remaining options:")

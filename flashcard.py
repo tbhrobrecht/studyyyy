@@ -1,13 +1,14 @@
 from datetime import datetime, timedelta
 
 class Flashcard:
-    def __init__(self, term, definition, ease=2.5, interval=1, repetitions=0, last_review=None):
+    def __init__(self, term, definition, ease=2.5, interval=1, repetitions=0, last_review=None, formula=None):
         self.term = term
         self.definition = definition
         self.ease = float(ease)
         self.interval = int(interval)
         self.repetitions = int(repetitions)
         self.last_review = datetime.fromisoformat(last_review) if last_review else None
+        self.formula = formula  # Add formula support
 
     def review(self, quality):
         """
@@ -38,7 +39,7 @@ class Flashcard:
         return self.last_review + timedelta(days=self.interval)
 
     def to_dict(self):
-        return {
+        result = {
             "term": self.term,
             "definition": self.definition,
             "ease": self.ease,
@@ -46,4 +47,10 @@ class Flashcard:
             "repetitions": self.repetitions,
             "last_review": self.last_review.isoformat() if self.last_review else None
         }
+        
+        # Include formula if it exists
+        if hasattr(self, 'formula') and self.formula:
+            result["formula"] = self.formula
+            
+        return result
             
