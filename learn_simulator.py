@@ -227,30 +227,19 @@ class LearnSimulator:
         for i, card in enumerate(card_set, 1):
             print(f"Card {i}/{len(card_set)}")
             
-            # For first-time cards (repetitions == 0), just show term and definition
-            if card.repetitions == 0:
-                correct_answer = self._show_card_first_time(card)
+            # Determine learning stage based on repetitions and easiness rating
+            if card.repetitions == 0 or card.ease < 2.0:
+                # Stage 1: Show term and definition (first time or very difficult)
+                print(f"[STAGE 1 - REVIEW MODE]")
+                correct_answer = self._show_card_review_mode(card)
+            elif card.ease < 3.0:
+                # Stage 2: Show definition, choose from 5 terms
+                print(f"[STAGE 2 - DEFINITION TO TERM]")
+                correct_answer = self._quiz_definition_to_term(card)
             else:
-                # Determine quiz mode based on ease factor and formula availability
-                has_formula = hasattr(card, 'formula') and card.formula
-                
-                if has_formula and card.ease >= 3.0:
-                    # For cards with formulas and high ease, add formula quiz mode
-                    quiz_modes = ['term_to_definition', 'definition_to_term', 'term_to_formula']
-                    quiz_mode = random.choice(quiz_modes)
-                    
-                    if quiz_mode == 'term_to_definition':
-                        correct_answer = self._quiz_term_to_definition(card)
-                    elif quiz_mode == 'definition_to_term':
-                        correct_answer = self._quiz_definition_to_term(card)
-                    else:  # term_to_formula
-                        correct_answer = self._quiz_term_to_formula(card)
-                elif card.ease < 3.0:
-                    # Term to definition mode (easier)
-                    correct_answer = self._quiz_term_to_definition(card)
-                else:
-                    # Definition to term mode (harder)
-                    correct_answer = self._quiz_definition_to_term(card)
+                # Stage 3: Show term, choose from 5 definitions
+                print(f"[STAGE 3 - TERM TO DEFINITION]")
+                correct_answer = self._quiz_term_to_definition(card)
             
             if correct_answer is None:  # User pressed ESC
                 return None
@@ -268,15 +257,25 @@ class LearnSimulator:
                 
             card.review(q)
             print(f"Next interval: {card.interval} days, Easiness: {card.ease:.2f}")
+            
+            # Show stage progression info
+            if card.repetitions == 1 and card.ease < 2.0:
+                print("Status: Stage 1 (Review Mode) - First time or needs review")
+            elif card.ease < 2.0:
+                print("Status: Stage 1 (Review Mode)")
+            elif card.ease < 3.0:
+                print("Status: Stage 2 (Definition → Term)")
+            else:
+                print("Status: Stage 3 (Term → Definition)")
+                
             print("-" * 30)
             
             set_completed_cards.append(card)
         
         return set_completed_cards
     
-    def _show_card_first_time(self, card):
-        """First-time viewing: Show term and definition, user acknowledges"""
-        print(f"NEW TERM")
+    def _show_card_review_mode(self, card):
+        """Stage 1: Show term and definition, user acknowledges"""
         print(f"Term: {card.term}")
         print(f"Definition: {card.definition}")
         
@@ -294,7 +293,7 @@ class LearnSimulator:
                 return None
             elif key == b' ':  # SPACE key
                 print("✓ Reviewed!")
-                return True  # Mark as correct for first viewing
+                return True  # Mark as correct for review mode
             elif key.lower() == b'r':  # R key to repeat
                 print("\n" + "="*40)
                 print(f"Term: {card.term}")
