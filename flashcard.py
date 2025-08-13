@@ -15,6 +15,8 @@ class Flashcard:
         Apply SM-2 algorithm based on quality (0-5 scale)
         quality >= 3: correct response, otherwise incorrect
         """
+        old_ease = self.ease  # Store old ease for debugging
+        
         if quality < 3:
             # Reset repetition
             self.repetitions = 0
@@ -28,9 +30,15 @@ class Flashcard:
                 self.interval = 6
             else:
                 self.interval = int(self.interval * self.ease)
+        
         # Update easiness factor
         # EF':= EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
-        self.ease = max(1.3, self.ease + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)))
+        ease_change = 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
+        self.ease = max(1.3, self.ease + ease_change)
+        
+        # Debug output - remove this later if needed
+        # print(f"  Debug: Quality={quality}, Old ease={old_ease:.3f}, Change={ease_change:.3f}, New ease={self.ease:.3f}")
+        
         self.last_review = datetime.now()
 
     def next_due(self):
@@ -42,7 +50,7 @@ class Flashcard:
         result = {
             "term": self.term,
             "definition": self.definition,
-            "ease": self.ease,
+            "ease": round(self.ease, 3),  # Round to 3 decimal places for precision
             "interval": self.interval,
             "repetitions": self.repetitions,
             "last_review": self.last_review.isoformat() if self.last_review else None

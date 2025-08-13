@@ -22,9 +22,9 @@ class LearnSimulator:
                     cards.append(Flashcard(
                         term=row['term'],
                         definition=row['definition'],
-                        ease=row.get('ease', 2.5),
-                        interval=row.get('interval', 1),
-                        repetitions=row.get('repetitions', 0),
+                        ease=float(row.get('ease', 2.5)),
+                        interval=int(row.get('interval', 1)),
+                        repetitions=int(row.get('repetitions', 0)),
                         last_review=row.get('last_review'),
                         formula=formula  # Add formula support
                     ))
@@ -69,7 +69,7 @@ class LearnSimulator:
         current_set_start = 0
         
         print("=== PHASE 1: Initial Review ===")
-        print("Each set: 25 least practiced terms + 5 hardest terms\n")
+        print("Each set: 7 terms + 3 hardest\n")
         
         while current_set_start < len(all_cards):
             # Get cards with lowest repetition counts
@@ -82,22 +82,22 @@ class LearnSimulator:
                 # Get all cards with the minimum repetition count
                 least_practiced = [card for card in remaining_cards if card.repetitions == min_repetitions]
                 
-                # If we have more than 25 cards with the same low repetition count, randomly select 25
-                if len(least_practiced) >= 25:
+                # If we have more than 7 cards with the same low repetition count, randomly select 7
+                if len(least_practiced) >= 7:
                     random.shuffle(least_practiced)
-                    new_cards = least_practiced[:25]
+                    new_cards = least_practiced[:7]
                 else:
                     # Take all least practiced cards and fill with next lowest repetition cards
                     new_cards = least_practiced[:]
                     remaining_after_least = [card for card in remaining_cards if card not in least_practiced]
                     
-                    while len(new_cards) < 25 and remaining_after_least:
+                    while len(new_cards) < 7 and remaining_after_least:
                         # Find next minimum repetition count
                         next_min_reps = min(card.repetitions for card in remaining_after_least)
                         next_least = [card for card in remaining_after_least if card.repetitions == next_min_reps]
                         
                         # Add cards with next lowest repetition count
-                        cards_needed = 25 - len(new_cards)
+                        cards_needed = 7 - len(new_cards)
                         if len(next_least) <= cards_needed:
                             new_cards.extend(next_least)
                             remaining_after_least = [card for card in remaining_after_least if card not in next_least]
@@ -108,9 +108,9 @@ class LearnSimulator:
             else:
                 new_cards = []
             
-            # Get 5 hardest from reviewed cards (if any)
+            # Get 3 hardest from reviewed cards (if any)
             if reviewed_cards:
-                hardest_cards = sorted(reviewed_cards, key=lambda c: c.ease)[:5]
+                hardest_cards = sorted(reviewed_cards, key=lambda c: c.ease)[:3]
             else:
                 hardest_cards = []
             
@@ -142,18 +142,18 @@ class LearnSimulator:
             input("Press Enter to continue to next set...")
             print()
         
-        # Phase 2: Randomized clusters of 25 with 5 hardest
+        # Phase 2: Randomized clusters of 7 + 3 hardest
         print("\n=== PHASE 2: Randomized Review ===")
-        print("Cards will be randomly grouped into sets of 25 + 5 hardest\n")
+        print("Cards will be randomly grouped into sets of 7 + 3 hardest\n")
         
         # Track recently practiced cards to ensure better distribution
         recently_practiced = set()
         
         while True:
-            # Get 5 hardest cards overall
-            hardest_cards = sorted(self.cards, key=lambda c: c.ease)[:5]
+            # Get 3 hardest cards overall
+            hardest_cards = sorted(self.cards, key=lambda c: c.ease)[:3]
             
-            # Get remaining cards (excluding the 5 hardest)
+            # Get remaining cards (excluding the 3 hardest)
             remaining_cards = [c for c in self.cards if c not in hardest_cards]
             
             if len(remaining_cards) == 0:
@@ -163,23 +163,23 @@ class LearnSimulator:
                 # Prioritize cards that haven't been practiced recently
                 unpracticed_cards = [c for c in remaining_cards if c not in recently_practiced]
                 
-                if len(unpracticed_cards) >= 25:
+                if len(unpracticed_cards) >= 7:
                     # Enough unpracticed cards available
                     random.shuffle(unpracticed_cards)
-                    selected_cards = unpracticed_cards[:25]
+                    selected_cards = unpracticed_cards[:7]
                 elif len(unpracticed_cards) > 0:
                     # Some unpracticed cards + fill with least recently practiced
                     practiced_cards = [c for c in remaining_cards if c in recently_practiced]
                     random.shuffle(practiced_cards)
                     
                     # Take all unpracticed + fill remainder with practiced
-                    selected_cards = unpracticed_cards + practiced_cards[:25 - len(unpracticed_cards)]
+                    selected_cards = unpracticed_cards + practiced_cards[:7 - len(unpracticed_cards)]
                 else:
                     # All cards have been practiced recently, reset and start over
                     print("All cards practiced recently - resetting tracking...")
                     recently_practiced.clear()
                     random.shuffle(remaining_cards)
-                    selected_cards = remaining_cards[:25]
+                    selected_cards = remaining_cards[:7]
                 
                 current_set = selected_cards + hardest_cards
             
@@ -249,7 +249,7 @@ class LearnSimulator:
                 q = 3  # Reduced score for correct answer with hint
                 print("✓ Correct (with hint)!")
             elif correct_answer:
-                q = 4  # Good recall for correct answer
+                q = 5  # Perfect recall for correct answer (changed from 4 to 5)
                 print("✓ Correct!")
             else:
                 q = 1  # Poor recall for incorrect answer
