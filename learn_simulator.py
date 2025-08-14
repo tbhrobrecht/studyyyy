@@ -228,18 +228,22 @@ class LearnSimulator:
             print(f"Card {i}/{len(card_set)}")
             
             # Determine learning stage based on repetitions and easiness rating
+            current_stage = None
             if card.repetitions == 0 or card.ease < 2.0:
                 # Stage 1: Show term and definition (first time or very difficult)
                 print(f"[STAGE 1 - REVIEW MODE]")
                 correct_answer = self._show_card_review_mode(card)
+                current_stage = 1
             elif card.ease < 3.0:
                 # Stage 2: Show definition, choose from 5 terms
                 print(f"[STAGE 2 - DEFINITION TO TERM]")
                 correct_answer = self._quiz_definition_to_term(card)
+                current_stage = 2
             else:
                 # Stage 3: Show term, choose from 5 definitions
                 print(f"[STAGE 3 - TERM TO DEFINITION]")
                 correct_answer = self._quiz_term_to_definition(card)
+                current_stage = 3
             
             if correct_answer is None:  # User pressed ESC
                 return None
@@ -255,7 +259,7 @@ class LearnSimulator:
                 q = 1  # Poor recall for incorrect answer
                 print("✗ Incorrect!")
                 
-            card.review(q)
+            card.review(q, stage=current_stage)  # Pass stage info to review method
             print(f"Next interval: {card.interval} days, Easiness: {card.ease:.2f}")
             
             # Show stage progression info

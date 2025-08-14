@@ -10,10 +10,11 @@ class Flashcard:
         self.last_review = datetime.fromisoformat(last_review) if last_review else None
         self.formula = formula  # Add formula support
 
-    def review(self, quality):
+    def review(self, quality, stage=None):
         """
         Apply SM-2 algorithm based on quality (0-5 scale)
         quality >= 3: correct response, otherwise incorrect
+        stage: Optional stage info for custom ease adjustments
         """
         old_ease = self.ease  # Store old ease for debugging
         
@@ -31,13 +32,19 @@ class Flashcard:
             else:
                 self.interval = int(self.interval * self.ease)
         
-        # Update easiness factor
-        # EF':= EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
-        ease_change = 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
-        self.ease = max(1.3, self.ease + ease_change)
+        # Update easiness factor with stage-specific adjustments
+        if stage == 2 and quality >= 4:  # Stage 2 (Definition -> Term) with correct answer
+            # Custom increase for stage 2: +0.25 ease points
+            ease_change = 0.25
+            self.ease = max(1.3, self.ease + ease_change)
+        else:
+            # Standard SM-2 algorithm
+            # EF':= EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
+            ease_change = 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
+            self.ease = max(1.3, self.ease + ease_change)
         
         # Debug output - remove this later if needed
-        # print(f"  Debug: Quality={quality}, Old ease={old_ease:.3f}, Change={ease_change:.3f}, New ease={self.ease:.3f}")
+        # print(f"  Debug: Stage={stage}, Quality={quality}, Old ease={old_ease:.3f}, Change={ease_change:.3f}, New ease={self.ease:.3f}")
         
         self.last_review = datetime.now()
 
