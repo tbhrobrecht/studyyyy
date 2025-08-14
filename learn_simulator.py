@@ -56,166 +56,148 @@ class LearnSimulator:
     def study_session(self):
         # Sort all cards by repetitions (lowest first) - cards with fewer repetitions need more practice
         all_cards = sorted(self.cards, key=lambda c: c.repetitions)
-        
+
         if not all_cards:
             print("No cards available for review!")
             return
-            
+
         print("Press ESC at any time to stop early and save progress.\n")
-        
-        # Phase 1: Initial review with 25 new + 5 hardest
-        unreviewed_cards = all_cards[:]
+
+        # Phase 1: Initial review sets of 7 least-practiced + 8 most difficult (from reviewed or overall)
         reviewed_cards = []
         current_set_start = 0
-        
+
         print("=== PHASE 1: Initial Review ===")
-        print("Each set: 7 terms + 3 hardest\n")
-        
+        print("Each set: 7 terms + 8 most difficult\n")
+
         while current_set_start < len(all_cards):
-            # Get cards with lowest repetition counts
             remaining_cards = all_cards[current_set_start:]
-            
-            # Find the minimum repetition count among remaining cards
+
+            # Build list of 7 least-practiced
+            new_cards = []
             if remaining_cards:
-                min_repetitions = min(card.repetitions for card in remaining_cards)
-                
-                # Get all cards with the minimum repetition count
-                least_practiced = [card for card in remaining_cards if card.repetitions == min_repetitions]
-                
-                # If we have more than 7 cards with the same low repetition count, randomly select 7
-                if len(least_practiced) >= 7:
-                    random.shuffle(least_practiced)
-                    new_cards = least_practiced[:7]
-                else:
-                    # Take all least practiced cards and fill with next lowest repetition cards
-                    new_cards = least_practiced[:]
-                    remaining_after_least = [card for card in remaining_cards if card not in least_practiced]
-                    
-                    while len(new_cards) < 7 and remaining_after_least:
-                        # Find next minimum repetition count
-                        next_min_reps = min(card.repetitions for card in remaining_after_least)
-                        next_least = [card for card in remaining_after_least if card.repetitions == next_min_reps]
-                        
-                        # Add cards with next lowest repetition count
-                        cards_needed = 7 - len(new_cards)
-                        if len(next_least) <= cards_needed:
-                            new_cards.extend(next_least)
-                            remaining_after_least = [card for card in remaining_after_least if card not in next_least]
+                # Grab 7 cards with the lowest repetition counts (fill from next-lowest groups if needed)
+                grouped = {}
+                for c in remaining_cards:
+                    grouped.setdefault(c.repetitions, []).append(c)
+
+                reps_sorted = sorted(grouped.keys())
+                for r in reps_sorted:
+                    group = grouped[r]
+                    random.shuffle(group)
+                    for c in group:
+                        if len(new_cards) < 7:
+                            new_cards.append(c)
                         else:
-                            random.shuffle(next_least)
-                            new_cards.extend(next_least[:cards_needed])
                             break
-            else:
-                new_cards = []
-            
-            # Get 3 hardest from reviewed cards (if any)
+                    if len(new_cards) >= 7:
+                        break
+
+            # Choose 8 most difficult (prefer reviewed_cards so we re-test known hard items)
             if reviewed_cards:
-                hardest_cards = sorted(reviewed_cards, key=lambda c: c.ease)[:3]
+                hardest_candidates = reviewed_cards
             else:
-                hardest_cards = []
-            
-            current_set = new_cards + hardest_cards
-            
+                hardest_candidates = self.cards
+
+            hardest_cards = sorted(hardest_candidates, key=lambda c: c.ease)[:8]
+
+            # Combine while avoiding duplicates
+            current_set = []
+            seen = set()
+            for c in new_cards + hardest_cards:
+                if c not in seen:
+                    current_set.append(c)
+                    seen.add(c)
+
             if not current_set:
                 break
-                
+
             repetition_counts = [card.repetitions for card in new_cards]
-            print(f"Set: {len(new_cards)} least practiced cards (reps: {min(repetition_counts) if repetition_counts else 0}-{max(repetition_counts) if repetition_counts else 0}) + {len(hardest_cards)} hardest cards = {len(current_set)} total")
-            
-            # Study the current set
+            print(f"Set: {len(new_cards)} least practiced cards (reps: {min(repetition_counts) if repetition_counts else 0}-{max(repetition_counts) if repetition_counts else 0}) + {len(hardest_cards)} most difficult = {len(current_set)} total")
+
             set_completed_cards = self._study_card_set(current_set)
-            if set_completed_cards is None:  # User pressed ESC
+            if set_completed_cards is None:
                 return
-                
-            # Update tracking - remove studied cards from the pool
-            reviewed_cards.extend(new_cards)  # Add newly reviewed cards
-            
-            # Remove studied cards from all_cards for next iteration
+
+            # Mark newly reviewed cards
+            reviewed_cards.extend(new_cards)
+
+            # Remove the new_cards from all_cards
             all_cards = [card for card in all_cards if card not in new_cards]
-            
-            # Check if we've reviewed all cards once
+
             if not all_cards:
                 print("\n=== All cards reviewed once! ===")
                 break
-                
+
             print(f"\nRemaining cards to review: {len(all_cards)}")
             input("Press Enter to continue to next set...")
             print()
-        
-        # Phase 2: Randomized clusters of 7 + 3 hardest
+
+        # Phase 2: Randomized clusters of 7 + 8 most difficult
         print("\n=== PHASE 2: Randomized Review ===")
-        print("Cards will be randomly grouped into sets of 7 + 3 hardest\n")
-        
-        # Track recently practiced cards to ensure better distribution
+        print("Cards will be randomly grouped into sets of 7 + 8 most difficult\n")
+
         recently_practiced = set()
-        
+
         while True:
-            # Get 3 hardest cards overall
-            hardest_cards = sorted(self.cards, key=lambda c: c.ease)[:3]
-            
-            # Get remaining cards (excluding the 3 hardest)
-            remaining_cards = [c for c in self.cards if c not in hardest_cards]
-            
-            if len(remaining_cards) == 0:
-                print("Only hardest cards remaining!")
+            # 8 most difficult overall
+            hardest_cards = sorted(self.cards, key=lambda c: c.ease)[:8]
+
+            # Remaining candidates (excluding hardest)
+            remaining_candidates = [c for c in self.cards if c not in hardest_cards]
+
+            if not remaining_candidates:
                 current_set = hardest_cards
             else:
-                # Prioritize cards that haven't been practiced recently
-                unpracticed_cards = [c for c in remaining_cards if c not in recently_practiced]
-                
-                if len(unpracticed_cards) >= 7:
-                    # Enough unpracticed cards available
-                    random.shuffle(unpracticed_cards)
-                    selected_cards = unpracticed_cards[:7]
-                elif len(unpracticed_cards) > 0:
-                    # Some unpracticed cards + fill with least recently practiced
-                    practiced_cards = [c for c in remaining_cards if c in recently_practiced]
-                    random.shuffle(practiced_cards)
-                    
-                    # Take all unpracticed + fill remainder with practiced
-                    selected_cards = unpracticed_cards + practiced_cards[:7 - len(unpracticed_cards)]
+                # choose up to 7 unpracticed or least recently practiced
+                unpracticed = [c for c in remaining_candidates if c not in recently_practiced]
+                if len(unpracticed) >= 7:
+                    random.shuffle(unpracticed)
+                    selected = unpracticed[:7]
+                elif unpracticed:
+                    practiced = [c for c in remaining_candidates if c in recently_practiced]
+                    random.shuffle(practiced)
+                    needed = 7 - len(unpracticed)
+                    selected = unpracticed + practiced[:needed]
                 else:
-                    # All cards have been practiced recently, reset and start over
-                    print("All cards practiced recently - resetting tracking...")
                     recently_practiced.clear()
-                    random.shuffle(remaining_cards)
-                    selected_cards = remaining_cards[:7]
-                
-                current_set = selected_cards + hardest_cards
-            
+                    random.shuffle(remaining_candidates)
+                    selected = remaining_candidates[:7]
+
+                current_set = []
+                seen = set()
+                for c in selected + hardest_cards:
+                    if c not in seen:
+                        current_set.append(c)
+                        seen.add(c)
+
             if not current_set:
                 print("All cards completed! Excellent work!")
                 break
-                
+
             print(f"Randomized set: {len(current_set)} cards")
             print(f"- New/unpracticed cards: {len([c for c in current_set if c not in recently_practiced and c not in hardest_cards])}")
             print(f"- Recently practiced: {len([c for c in current_set if c in recently_practiced])}")
-            print(f"- Hardest cards: {len(hardest_cards)}")
-            
-            # Study the current set
+            print(f"- Most difficult cards included: {len([c for c in current_set if c in hardest_cards])}")
+
             set_completed_cards = self._study_card_set(current_set)
-            if set_completed_cards is None:  # User pressed ESC
+            if set_completed_cards is None:
                 return
-            
-            # Add all studied cards to recently practiced (except hardest - they always appear)
+
             for card in current_set:
-                if card not in hardest_cards:
-                    recently_practiced.add(card)
-            
-            # If we've practiced too many cards, remove some older ones to keep variety
-            if len(recently_practiced) > len(self.cards) * 0.6:  # Reset when 60% have been practiced
-                # Keep only the most recently practiced half
+                recently_practiced.add(card)
+
+            if len(recently_practiced) > len(self.cards) * 0.6:
                 cards_to_keep = list(recently_practiced)
                 random.shuffle(cards_to_keep)
                 recently_practiced = set(cards_to_keep[:len(recently_practiced)//2])
-            
-            # Ask if user wants to continue
+
             print(f"\nSet completed!")
             choice = input("Continue with another randomized set? (y/n): ").lower().strip()
             if choice != 'y' and choice != 'yes':
                 break
             print()
-        
+
         self.save_deck(self.filepath or "deck.csv")
         print("Session complete. Progress saved.")
     
