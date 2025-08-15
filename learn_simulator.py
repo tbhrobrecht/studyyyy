@@ -63,85 +63,76 @@ class LearnSimulator:
 
         print("Press ESC at any time to stop early and save progress.\n")
 
-        # Phase 1: Initial review sets of 7 least-practiced + 8 most difficult (from reviewed or overall)
-        reviewed_cards = []
-        current_set_start = 0
-
+        # Phase 1: Sets of 7 new terms + same 7 terms repeated
         print("=== PHASE 1: Initial Review ===")
-        print("Each set: 7 terms + 8 most difficult\n")
+        print("Each set: 7 new terms + same 7 terms repeated\n")
 
-        while current_set_start < len(all_cards):
-            remaining_cards = all_cards[current_set_start:]
+        current_set_start = 0
+        carry_forward_cards = []  # Cards that were answered incorrectly
 
-            # Build list of 7 least-practiced
+        while current_set_start < len(all_cards) or carry_forward_cards:
+            # Build list of 7 cards for this set
             new_cards = []
-            if remaining_cards:
-                # Grab 7 cards with the lowest repetition counts (fill from next-lowest groups if needed)
-                grouped = {}
-                for c in remaining_cards:
-                    grouped.setdefault(c.repetitions, []).append(c)
-
-                reps_sorted = sorted(grouped.keys())
-                for r in reps_sorted:
-                    group = grouped[r]
-                    random.shuffle(group)
-                    for c in group:
-                        if len(new_cards) < 7:
-                            new_cards.append(c)
-                        else:
-                            break
-                    if len(new_cards) >= 7:
+            
+            # First, add any carry-forward cards (up to 7)
+            for card in carry_forward_cards[:7]:
+                new_cards.append(card)
+            carry_forward_cards = carry_forward_cards[7:]  # Remove used cards
+            
+            # Fill remaining slots with new cards from all_cards
+            if len(new_cards) < 7 and current_set_start < len(all_cards):
+                remaining_cards = all_cards[current_set_start:]
+                for card in remaining_cards:
+                    if len(new_cards) < 7:
+                        new_cards.append(card)
+                        current_set_start += 1
+                    else:
                         break
 
-            # Choose 8 most difficult (prefer reviewed_cards so we re-test known hard items)
-            if reviewed_cards:
-                hardest_candidates = reviewed_cards
-            else:
-                hardest_candidates = self.cards
-
-            hardest_cards = sorted(hardest_candidates, key=lambda c: c.ease)[:8]
-
-            # Combine while avoiding duplicates
-            current_set = []
-            seen = set()
-            for c in new_cards + hardest_cards:
-                if c not in seen:
-                    current_set.append(c)
-                    seen.add(c)
-
-            if not current_set:
+            if not new_cards:
                 break
 
-            repetition_counts = [card.repetitions for card in new_cards]
-            print(f"Set: {len(new_cards)} least practiced cards (reps: {min(repetition_counts) if repetition_counts else 0}-{max(repetition_counts) if repetition_counts else 0}) + {len(hardest_cards)} most difficult = {len(current_set)} total")
+            # Create the set: 7 terms + same 7 terms again
+            current_set = new_cards + new_cards  # Duplicate the 7 terms
+            
+            print(f"Set: {len(new_cards)} terms + {len(new_cards)} repeats = {len(current_set)} total")
 
-            set_completed_cards = self._study_card_set(current_set)
-            if set_completed_cards is None:
+            # Study the set and track which cards were answered incorrectly
+            set_results = self._study_card_set_with_tracking(current_set)
+            if set_results is None:  # User pressed ESC
                 return
-
-            # Mark newly reviewed cards
-            reviewed_cards.extend(new_cards)
-
-            # Remove the new_cards from all_cards
-            all_cards = [card for card in all_cards if card not in new_cards]
-
-            if not all_cards:
-                print("\n=== All cards reviewed once! ===")
+            
+            set_completed_cards, incorrect_cards = set_results
+            
+            # Add incorrect cards to carry_forward for next set
+            # Only add unique cards (avoid duplicates from the repeated portion)
+            unique_incorrect = []
+            for card in incorrect_cards:
+                if card not in unique_incorrect and card in new_cards:
+                    unique_incorrect.append(card)
+            carry_forward_cards.extend(unique_incorrect)
+            
+            if carry_forward_cards:
+                print(f"\n{len(unique_incorrect)} cards answered incorrectly will appear in the next set.")
+            
+            if current_set_start >= len(all_cards) and not carry_forward_cards:
+                print("\n=== All cards completed! ===")
                 break
 
-            print(f"\nRemaining cards to review: {len(all_cards)}")
+            print(f"\nRemaining new cards: {len(all_cards) - current_set_start}")
+            if carry_forward_cards:
+                print(f"Cards to retry: {len(carry_forward_cards)}")
             input("Press Enter to continue to next set...")
             print()
-
-        # Phase 2: Randomized clusters of 7 + 8 most difficult
+        # Phase 2: Randomized clusters of 7 + variable number of most difficult
         print("\n=== PHASE 2: Randomized Review ===")
-        print("Cards will be randomly grouped into sets of 7 + 8 most difficult\n")
+        print("Cards will be randomly grouped into sets of 7 + variable number of hard terms\n")
 
         recently_practiced = set()
 
         while True:
-            # 8 most difficult overall
-            hardest_cards = sorted(self.cards, key=lambda c: c.ease)[:8]
+            # Select hardest cards only from reviewed cards (repetitions > 0).
+            hardest_cards = sorted([c for c in self.cards if c.repetitions > 0], key=lambda c: c.ease)[:8]
 
             # Remaining candidates (excluding hardest)
             remaining_candidates = [c for c in self.cards if c not in hardest_cards]
@@ -259,6 +250,73 @@ class LearnSimulator:
             set_completed_cards.append(card)
         
         return set_completed_cards
+
+        self.save_deck(self.filepath or "deck.csv")
+        print("Session complete. Progress saved.")
+    
+    def _study_card_set_with_tracking(self, card_set):
+        """Study a set of cards and return (completed_cards, incorrect_cards) or None if ESC pressed"""
+        print("-" * 50)
+        set_completed_cards = []
+        incorrect_cards = []
+        
+        for i, card in enumerate(card_set, 1):
+            print(f"Card {i}/{len(card_set)}")
+            
+            # Determine learning stage based on repetitions and easiness rating
+            current_stage = None
+            if card.repetitions == 0 or card.ease < 2.0:
+                # Stage 1: Show term and definition (first time or very difficult)
+                print(f"[STAGE 1 - REVIEW MODE]")
+                correct_answer = self._show_card_review_mode(card)
+                current_stage = 1
+            elif card.ease < 3.0:
+                # Stage 2: Show definition, choose from 5 terms
+                print(f"[STAGE 2 - DEFINITION TO TERM]")
+                correct_answer = self._quiz_definition_to_term(card)
+                current_stage = 2
+            else:
+                # Stage 3: Show term, choose from 5 definitions
+                print(f"[STAGE 3 - TERM TO DEFINITION]")
+                correct_answer = self._quiz_term_to_definition(card)
+                current_stage = 3
+            
+            if correct_answer is None:  # User pressed ESC
+                return None
+            
+            # Update card based on performance
+            was_correct = False
+            if correct_answer == "hint_correct":
+                q = 3  # Reduced score for correct answer with hint
+                print("✓ Correct (with hint)!")
+                was_correct = True
+            elif correct_answer:
+                q = 5  # Perfect recall for correct answer (changed from 4 to 5)
+                print("✓ Correct!")
+                was_correct = True
+            else:
+                q = 1  # Poor recall for incorrect answer
+                print("✗ Incorrect!")
+                incorrect_cards.append(card)
+                
+            card.review(q, stage=current_stage)  # Pass stage info to review method
+            print(f"Next interval: {card.interval} days, Easiness: {card.ease:.2f}")
+            
+            # Show stage progression info
+            if card.repetitions == 1 and card.ease < 2.0:
+                print("Status: Stage 1 (Review Mode) - First time or needs review")
+            elif card.ease < 2.0:
+                print("Status: Stage 1 (Review Mode)")
+            elif card.ease < 3.0:
+                print("Status: Stage 2 (Definition → Term)")
+            else:
+                print("Status: Stage 3 (Term → Definition)")
+                
+            print("-" * 30)
+            
+            set_completed_cards.append(card)
+        
+        return set_completed_cards, incorrect_cards
     
     def _show_card_review_mode(self, card):
         """Stage 1: Show term and definition, user acknowledges"""

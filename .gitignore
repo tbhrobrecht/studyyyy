@@ -5,6 +5,7 @@ __pycache__/
 
 .idea/
 
+tests/
 practice_decks/
 vocabulary_template/
 testing/
