@@ -116,14 +116,12 @@ def deck_progress_report(deck_name):
         mature_cards = sum(1 for card in cards if int(card.get('repetitions', 0)) >= 3)
         
         avg_ease = sum(float(card.get('ease', 2.5)) for card in cards) / total_cards
-        avg_interval = sum(int(card.get('interval', 1)) for card in cards) / total_cards
         
         print(f"Total Cards: {total_cards}")
         print(f"New Cards: {new_cards} ({new_cards/total_cards*100:.1f}%)")
         print(f"Learning Cards: {learning_cards} ({learning_cards/total_cards*100:.1f}%)")
         print(f"Mature Cards: {mature_cards} ({mature_cards/total_cards*100:.1f}%)")
         print(f"Average Ease: {avg_ease:.2f}")
-        print(f"Average Interval: {avg_interval:.1f} days")
         
         # Show most difficult cards
         difficult_cards = sorted(cards, key=lambda x: float(x.get('ease', 2.5)))[:5]

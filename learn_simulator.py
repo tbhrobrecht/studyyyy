@@ -34,7 +34,7 @@ class LearnSimulator:
                         term=row['term'],
                         definition=row['definition'],
                         ease=float(row.get('ease', 2.5)),
-                        interval=int(row.get('interval', 1)),
+                        interval=1,  # Default interval since we're removing this from CSV
                         repetitions=int(row.get('repetitions', 0)),
                         last_review=row.get('last_review'),
                         formula=formula  # Add formula support
@@ -50,9 +50,9 @@ class LearnSimulator:
             has_formulas = any(hasattr(card, 'formula') and card.formula for card in self.cards)
             
             if has_formulas:
-                fieldnames = ['term', 'definition', 'formula', 'ease', 'interval', 'repetitions', 'last_review']
+                fieldnames = ['term', 'definition', 'formula', 'ease', 'repetitions', 'last_review']
             else:
-                fieldnames = ['term', 'definition', 'ease', 'interval', 'repetitions', 'last_review']
+                fieldnames = ['term', 'definition', 'ease', 'repetitions', 'last_review']
                 
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()

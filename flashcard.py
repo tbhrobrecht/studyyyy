@@ -58,9 +58,8 @@ class Flashcard:
             "term": self.term,
             "definition": self.definition,
             "ease": round(self.ease, 3),  # Round to 3 decimal places for precision
-            "interval": self.interval,
             "repetitions": self.repetitions,
-            "last_review": self.last_review.isoformat() if self.last_review else None
+            "last_review": self.last_review.strftime('%Y-%m-%d') if self.last_review else None
         }
         
         # Include formula if it exists
