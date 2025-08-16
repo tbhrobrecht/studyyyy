@@ -4,10 +4,21 @@ from flashcard import Flashcard
 import msvcrt
 import random
 
+# Color codes for terminal output
+class Colors:
+    GREEN = '\033[92m'    # Bright green for correct answers
+    RED = '\033[91m'      # Bright red for incorrect answers
+    YELLOW = '\033[93m'   # Yellow for hints
+    BLUE = '\033[94m'     # Blue for info
+    BOLD = '\033[1m'      # Bold text
+    RESET = '\033[0m'     # Reset to default color
+
 class LearnSimulator:
     def __init__(self, deck, filepath=None):
         self.cards = deck
         self.filepath = filepath
+        self.session_stats = []  # Track statistics for each set
+        self.previous_stage_distribution = None  # Track changes in stage distribution
 
     @classmethod
     def load_deck(cls, filepath):
@@ -52,6 +63,171 @@ class LearnSimulator:
     def flashcards(self):
         """Alias for cards to maintain compatibility with quiz methods"""
         return self.cards
+
+    def _calculate_set_statistics(self, set_cards, correct_count, incorrect_count, hint_count=0):
+        """Calculate statistics for a completed set"""
+        total_cards = len(set_cards)
+        if total_cards == 0:
+            return None
+            
+        # Basic percentages
+        percent_correct = (correct_count / total_cards) * 100
+        percent_incorrect = (incorrect_count / total_cards) * 100
+        percent_with_hint = (hint_count / total_cards) * 100 if hint_count > 0 else 0
+        
+        # Stage distribution (current state of all cards)
+        stage_counts = {1: 0, 2: 0, 3: 0}
+        for card in self.cards:  # Use all cards, not just set_cards
+            if card.repetitions == 0 or card.ease < 2.0:
+                stage_counts[1] += 1
+            elif card.ease < 3.0:
+                stage_counts[2] += 1
+            else:
+                stage_counts[3] += 1
+        
+        total_all_cards = len(self.cards)
+        stage_percentages = {
+            stage: (count / total_all_cards) * 100 
+            for stage, count in stage_counts.items()
+        }
+        
+        stats = {
+            'total_cards': total_cards,
+            'correct_count': correct_count,
+            'incorrect_count': incorrect_count,
+            'hint_count': hint_count,
+            'percent_correct': percent_correct,
+            'percent_incorrect': percent_incorrect,
+            'percent_with_hint': percent_with_hint,
+            'stage_counts': stage_counts,
+            'stage_percentages': stage_percentages,
+            'total_all_cards': total_all_cards
+        }
+        
+        return stats
+    
+    def _display_set_statistics(self, stats):
+        """Display statistics for a completed set"""
+        if not stats:
+            return
+            
+        print("\n" + "="*60)
+        print("SET STATISTICS")
+        print("="*60)
+        
+        # Performance in this set
+        print(f"📊 SET PERFORMANCE:")
+        print(f"   Total cards in set: {stats['total_cards']}")
+        print(f"   {Colors.GREEN}✓ Correct answers: {stats['correct_count']} ({stats['percent_correct']:.1f}%){Colors.RESET}")
+        print(f"   {Colors.RED}✗ Incorrect answers: {stats['incorrect_count']} ({stats['percent_incorrect']:.1f}%){Colors.RESET}")
+        if stats['hint_count'] > 0:
+            print(f"   {Colors.YELLOW}💡 Correct with hint: {stats['hint_count']} ({stats['percent_with_hint']:.1f}%){Colors.RESET}")
+        
+        # Overall progress stages
+        print(f"\n🎯 OVERALL DECK PROGRESS:")
+        print(f"   Total cards in deck: {stats['total_all_cards']}")
+        print(f"   📚 Stage 1 (Review Mode): {stats['stage_counts'][1]} cards ({stats['stage_percentages'][1]:.1f}%)")
+        print(f"   📖 Stage 2 (Definition → Term): {stats['stage_counts'][2]} cards ({stats['stage_percentages'][2]:.1f}%)")
+        print(f"   🎓 Stage 3 (Term → Definition): {stats['stage_counts'][3]} cards ({stats['stage_percentages'][3]:.1f}%)")
+        
+        # Show trends if we have previous data
+        if self.previous_stage_distribution:
+            self._display_trends(stats['stage_counts'])
+        
+        # Store current distribution for next comparison
+        self.previous_stage_distribution = stats['stage_counts'].copy()
+        
+        # Store stats for session summary
+        self.session_stats.append(stats)
+        
+        print("="*60)
+        
+        # Pause to let user read the statistics
+        input("\nPress Enter to continue...")
+        print()
+    
+    def _display_trends(self, current_stage_counts):
+        """Display trends comparing current stage distribution to previous"""
+        print(f"\n📈 PROGRESS TRENDS:")
+        
+        for stage in [1, 2, 3]:
+            current = current_stage_counts[stage]
+            previous = self.previous_stage_distribution[stage]
+            change = current - previous
+            
+            stage_names = {1: "Stage 1 (Review)", 2: "Stage 2 (Def→Term)", 3: "Stage 3 (Term→Def)"}
+            
+            if change > 0:
+                print(f"   📈 {stage_names[stage]}: +{change} cards (getting harder)")
+            elif change < 0:
+                print(f"   📉 {stage_names[stage]}: {change} cards (progressing!)")
+            else:
+                print(f"   ➡️  {stage_names[stage]}: No change")
+        
+        # Overall difficulty trend
+        difficulty_previous = (self.previous_stage_distribution[1] * 1 + 
+                              self.previous_stage_distribution[2] * 2 + 
+                              self.previous_stage_distribution[3] * 3)
+        difficulty_current = (current_stage_counts[1] * 1 + 
+                             current_stage_counts[2] * 2 + 
+                             current_stage_counts[3] * 3)
+        
+        if difficulty_current > difficulty_previous:
+            print(f"   🚀 Overall trend: Advancing to higher stages!")
+        elif difficulty_current < difficulty_previous:
+            print(f"   ⚠️  Overall trend: Some cards moved to lower stages")
+        else:
+            print(f"   ⚖️  Overall trend: Maintaining current level")
+
+    def _display_session_summary(self):
+        """Display a summary of the entire study session"""
+        if not self.session_stats:
+            return
+            
+        print("\n" + "🎉" * 20)
+        print("SESSION SUMMARY")
+        print("🎉" * 20)
+        
+        total_sets = len(self.session_stats)
+        total_cards_practiced = sum(stats['total_cards'] for stats in self.session_stats)
+        total_correct = sum(stats['correct_count'] for stats in self.session_stats)
+        total_incorrect = sum(stats['incorrect_count'] for stats in self.session_stats)
+        total_hints = sum(stats['hint_count'] for stats in self.session_stats)
+        
+        overall_accuracy = (total_correct / total_cards_practiced * 100) if total_cards_practiced > 0 else 0
+        
+        print(f"📚 Sets completed: {total_sets}")
+        print(f"🎯 Total cards practiced: {total_cards_practiced}")
+        print(f"✅ Overall accuracy: {overall_accuracy:.1f}%")
+        print(f"💡 Hints used: {total_hints}")
+        
+        if total_sets > 1:
+            print(f"\n📈 PROGRESS OVER TIME:")
+            for i, stats in enumerate(self.session_stats, 1):
+                print(f"   Set {i}: {stats['percent_correct']:.1f}% correct ({stats['correct_count']}/{stats['total_cards']})")
+            
+            # Show improvement trend
+            first_accuracy = self.session_stats[0]['percent_correct']
+            last_accuracy = self.session_stats[-1]['percent_correct']
+            
+            if last_accuracy > first_accuracy:
+                improvement = last_accuracy - first_accuracy
+                print(f"   🚀 Improvement: +{improvement:.1f}% from first to last set!")
+            elif last_accuracy < first_accuracy:
+                decline = first_accuracy - last_accuracy
+                print(f"   📉 Accuracy decreased by {decline:.1f}% (normal for harder material)")
+            else:
+                print(f"   ⚖️  Consistent performance maintained")
+        
+        # Final stage distribution
+        if self.session_stats:
+            final_stats = self.session_stats[-1]
+            print(f"\n🏆 FINAL DECK STATUS:")
+            print(f"   📚 Stage 1 (Review): {final_stats['stage_counts'][1]} cards ({final_stats['stage_percentages'][1]:.1f}%)")
+            print(f"   📖 Stage 2 (Def→Term): {final_stats['stage_counts'][2]} cards ({final_stats['stage_percentages'][2]:.1f}%)")
+            print(f"   🎓 Stage 3 (Term→Def): {final_stats['stage_counts'][3]} cards ({final_stats['stage_percentages'][3]:.1f}%)")
+        
+        print("🎉" * 20)
 
     def study_session(self):
         # Sort all cards by repetitions (lowest first) - cards with fewer repetitions need more practice
@@ -190,12 +366,16 @@ class LearnSimulator:
             print()
 
         self.save_deck(self.filepath or "deck.csv")
+        self._display_session_summary()
         print("Session complete. Progress saved.")
     
     def _study_card_set(self, card_set):
         """Study a set of cards and return the completed cards (or None if ESC pressed)"""
         print("-" * 50)
         set_completed_cards = []
+        correct_count = 0
+        incorrect_count = 0
+        hint_count = 0
         
         for i, card in enumerate(card_set, 1):
             print(f"Card {i}/{len(card_set)}")
@@ -221,16 +401,20 @@ class LearnSimulator:
             if correct_answer is None:  # User pressed ESC
                 return None
             
-            # Update card based on performance
+            # Update card based on performance and track statistics
             if correct_answer == "hint_correct":
                 q = 3  # Reduced score for correct answer with hint
-                print("✓ Correct (with hint)!")
+                print(f"{Colors.YELLOW}✓ Correct (with hint)!{Colors.RESET}")
+                correct_count += 1
+                hint_count += 1
             elif correct_answer:
                 q = 5  # Perfect recall for correct answer (changed from 4 to 5)
-                print("✓ Correct!")
+                print(f"{Colors.GREEN}✓ Correct!{Colors.RESET}")
+                correct_count += 1
             else:
                 q = 1  # Poor recall for incorrect answer
-                print("✗ Incorrect!")
+                print(f"{Colors.RED}✗ Incorrect!{Colors.RESET}")
+                incorrect_count += 1
                 
             card.review(q, stage=current_stage)  # Pass stage info to review method
             print(f"Next interval: {card.interval} days, Easiness: {card.ease:.2f}")
@@ -249,16 +433,20 @@ class LearnSimulator:
             
             set_completed_cards.append(card)
         
+        # Calculate and display statistics
+        stats = self._calculate_set_statistics(card_set, correct_count, incorrect_count, hint_count)
+        self._display_set_statistics(stats)
+        
         return set_completed_cards
-
-        self.save_deck(self.filepath or "deck.csv")
-        print("Session complete. Progress saved.")
     
     def _study_card_set_with_tracking(self, card_set):
         """Study a set of cards and return (completed_cards, incorrect_cards) or None if ESC pressed"""
         print("-" * 50)
         set_completed_cards = []
         incorrect_cards = []
+        correct_count = 0
+        incorrect_count = 0
+        hint_count = 0
         
         for i, card in enumerate(card_set, 1):
             print(f"Card {i}/{len(card_set)}")
@@ -284,20 +472,24 @@ class LearnSimulator:
             if correct_answer is None:  # User pressed ESC
                 return None
             
-            # Update card based on performance
+            # Update card based on performance and track statistics
             was_correct = False
             if correct_answer == "hint_correct":
                 q = 3  # Reduced score for correct answer with hint
-                print("✓ Correct (with hint)!")
+                print(f"{Colors.YELLOW}✓ Correct (with hint)!{Colors.RESET}")
                 was_correct = True
+                correct_count += 1
+                hint_count += 1
             elif correct_answer:
                 q = 5  # Perfect recall for correct answer (changed from 4 to 5)
-                print("✓ Correct!")
+                print(f"{Colors.GREEN}✓ Correct!{Colors.RESET}")
                 was_correct = True
+                correct_count += 1
             else:
                 q = 1  # Poor recall for incorrect answer
-                print("✗ Incorrect!")
+                print(f"{Colors.RED}✗ Incorrect!{Colors.RESET}")
                 incorrect_cards.append(card)
+                incorrect_count += 1
                 
             card.review(q, stage=current_stage)  # Pass stage info to review method
             print(f"Next interval: {card.interval} days, Easiness: {card.ease:.2f}")
@@ -315,6 +507,10 @@ class LearnSimulator:
             print("-" * 30)
             
             set_completed_cards.append(card)
+        
+        # Calculate and display statistics
+        stats = self._calculate_set_statistics(card_set, correct_count, incorrect_count, hint_count)
+        self._display_set_statistics(stats)
         
         return set_completed_cards, incorrect_cards
     
@@ -403,13 +599,13 @@ class LearnSimulator:
                     # If hint was used, reduce score
                     correct = choice == correct_index
                     if correct and used_hint:
-                        print(f"✓ Correct (with hint): {choice}. {correct_definition}")
+                        print(f"{Colors.YELLOW}✓ Correct (with hint): {choice}. {correct_definition}{Colors.RESET}")
                         return "hint_correct"  # Special return value for reduced score
                     elif correct:
-                        print(f"✓ Correct: {choice}. {correct_definition}")
+                        print(f"{Colors.GREEN}✓ Correct: {choice}. {correct_definition}{Colors.RESET}")
                         return True
                     else:
-                        print(f"✗ Incorrect! You selected: {choice}. {options[choice-1]}")
+                        print(f"{Colors.RED}✗ Incorrect! You selected: {choice}. {options[choice-1]}{Colors.RESET}")
                         print(f"The correct answer was: {correct_index}. {correct_definition}")
                         return False
                 else:
@@ -474,13 +670,13 @@ class LearnSimulator:
                     # If hint was used, reduce score
                     correct = choice == correct_index
                     if correct and used_hint:
-                        print(f"✓ Correct (with hint): {choice}. {correct_term}")
+                        print(f"{Colors.YELLOW}✓ Correct (with hint): {choice}. {correct_term}{Colors.RESET}")
                         return "hint_correct"  # Special return value for reduced score
                     elif correct:
-                        print(f"✓ Correct: {choice}. {correct_term}")
+                        print(f"{Colors.GREEN}✓ Correct: {choice}. {correct_term}{Colors.RESET}")
                         return True
                     else:
-                        print(f"✗ Incorrect! You selected: {choice}. {options[choice-1]}")
+                        print(f"{Colors.RED}✗ Incorrect! You selected: {choice}. {options[choice-1]}{Colors.RESET}")
                         print(f"The correct answer was: {correct_index}. {correct_term}")
                         return False
                 else:
@@ -571,13 +767,13 @@ class LearnSimulator:
                     # If hint was used, reduce score
                     correct = choice == correct_index
                     if correct and used_hint:
-                        print(f"✓ Correct (with hint): {choice}. {correct_formula}")
+                        print(f"{Colors.YELLOW}✓ Correct (with hint): {choice}. {correct_formula}{Colors.RESET}")
                         return "hint_correct"  # Special return value for reduced score
                     elif correct:
-                        print(f"✓ Correct: {choice}. {correct_formula}")
+                        print(f"{Colors.GREEN}✓ Correct: {choice}. {correct_formula}{Colors.RESET}")
                         return True
                     else:
-                        print(f"✗ Incorrect! You selected: {choice}. {options[choice-1]}")
+                        print(f"{Colors.RED}✗ Incorrect! You selected: {choice}. {options[choice-1]}{Colors.RESET}")
                         print(f"The correct answer was: {correct_index}. {correct_formula}")
                         return False
                 else:
