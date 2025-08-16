@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import csv
+import time
 from flashcard import Flashcard
 import msvcrt
 import random
@@ -382,23 +383,33 @@ class LearnSimulator:
             
             # Determine learning stage based on repetitions and easiness rating
             current_stage = None
+            response_time = None
             if card.repetitions == 0 or card.ease < 2.0:
                 # Stage 1: Show term and definition (first time or very difficult)
                 print(f"[STAGE 1 - REVIEW MODE]")
-                correct_answer = self._show_card_review_mode(card)
+                result = self._show_card_review_mode(card)
                 current_stage = 1
             elif card.ease < 3.0:
                 # Stage 2: Show definition, choose from 5 terms
                 print(f"[STAGE 2 - DEFINITION TO TERM]")
-                correct_answer = self._quiz_definition_to_term(card)
+                result = self._quiz_definition_to_term(card)
                 current_stage = 2
             else:
                 # Stage 3: Show term, choose from 5 definitions
                 print(f"[STAGE 3 - TERM TO DEFINITION]")
-                correct_answer = self._quiz_term_to_definition(card)
+                result = self._quiz_term_to_definition(card)
                 current_stage = 3
             
-            if correct_answer is None:  # User pressed ESC
+            # Handle the result - some methods return tuples, others just values
+            if result is None:  # User pressed ESC
+                return None
+            elif isinstance(result, tuple):
+                correct_answer, response_time = result
+            else:
+                correct_answer = result
+                response_time = None
+                
+            if correct_answer is None:  # Double check for ESC
                 return None
             
             # Update card based on performance and track statistics
@@ -416,7 +427,7 @@ class LearnSimulator:
                 print(f"{Colors.RED}✗ Incorrect!{Colors.RESET}")
                 incorrect_count += 1
                 
-            card.review(q, stage=current_stage)  # Pass stage info to review method
+            card.review(q, stage=current_stage, response_time=response_time)  # Pass stage info and response time to review method
             print(f"Next interval: {card.interval} days, Easiness: {card.ease:.2f}")
             
             # Show stage progression info
@@ -453,23 +464,33 @@ class LearnSimulator:
             
             # Determine learning stage based on repetitions and easiness rating
             current_stage = None
+            response_time = None
             if card.repetitions == 0 or card.ease < 2.0:
                 # Stage 1: Show term and definition (first time or very difficult)
                 print(f"[STAGE 1 - REVIEW MODE]")
-                correct_answer = self._show_card_review_mode(card)
+                result = self._show_card_review_mode(card)
                 current_stage = 1
             elif card.ease < 3.0:
                 # Stage 2: Show definition, choose from 5 terms
                 print(f"[STAGE 2 - DEFINITION TO TERM]")
-                correct_answer = self._quiz_definition_to_term(card)
+                result = self._quiz_definition_to_term(card)
                 current_stage = 2
             else:
                 # Stage 3: Show term, choose from 5 definitions
                 print(f"[STAGE 3 - TERM TO DEFINITION]")
-                correct_answer = self._quiz_term_to_definition(card)
+                result = self._quiz_term_to_definition(card)
                 current_stage = 3
             
-            if correct_answer is None:  # User pressed ESC
+            # Handle the result - some methods return tuples, others just values
+            if result is None:  # User pressed ESC
+                return None
+            elif isinstance(result, tuple):
+                correct_answer, response_time = result
+            else:
+                correct_answer = result
+                response_time = None
+                
+            if correct_answer is None:  # Double check for ESC
                 return None
             
             # Update card based on performance and track statistics
@@ -491,7 +512,7 @@ class LearnSimulator:
                 incorrect_cards.append(card)
                 incorrect_count += 1
                 
-            card.review(q, stage=current_stage)  # Pass stage info to review method
+            card.review(q, stage=current_stage, response_time=response_time)  # Pass stage info and response time to review method
             print(f"Next interval: {card.interval} days, Easiness: {card.ease:.2f}")
             
             # Show stage progression info
@@ -516,6 +537,7 @@ class LearnSimulator:
     
     def _show_card_review_mode(self, card):
         """Stage 1: Show term and definition, user acknowledges"""
+        start_time = time.time()
         print(f"Term: {card.term}")
         print(f"Definition: {card.definition}")
         
@@ -532,8 +554,9 @@ class LearnSimulator:
                 self.save_deck(self.filepath or "deck.csv")
                 return None
             elif key == b' ':  # SPACE key
+                response_time = time.time() - start_time
                 print("✓ Reviewed!")
-                return True  # Mark as correct for review mode
+                return True, response_time  # Return tuple: (result, response_time)
             elif key.lower() == b'r':  # R key to repeat
                 print("\n" + "="*40)
                 print(f"Term: {card.term}")
@@ -584,30 +607,34 @@ class LearnSimulator:
         for i, option in enumerate(options, 1):
             print(f"{i}. {option}")
         
-        # Get user input
+        # Get user input with timing
+        start_time = time.time()
         used_hint = False
+        response_time = None
+        
         while True:
             print("Enter choice (1-5), 'h' for hint, or ESC to stop:")
             key = msvcrt.getch()
             if key == b'\x1b':  # ESC key
                 print("\nSession stopped early. Saving progress...")
                 self.save_deck(self.filepath or "deck.csv")
-                return None
+                return None, None
             elif key in [b'1', b'2', b'3', b'4', b'5']:
+                response_time = time.time() - start_time
                 choice = int(key.decode())
                 if choice <= len(options):
                     # If hint was used, reduce score
                     correct = choice == correct_index
                     if correct and used_hint:
                         print(f"{Colors.YELLOW}✓ Correct (with hint): {choice}. {correct_definition}{Colors.RESET}")
-                        return "hint_correct"  # Special return value for reduced score
+                        return "hint_correct", response_time  # Special return value for reduced score
                     elif correct:
                         print(f"{Colors.GREEN}✓ Correct: {choice}. {correct_definition}{Colors.RESET}")
-                        return True
+                        return True, response_time
                     else:
                         print(f"{Colors.RED}✗ Incorrect! You selected: {choice}. {options[choice-1]}{Colors.RESET}")
                         print(f"The correct answer was: {correct_index}. {correct_definition}")
-                        return False
+                        return False, response_time
                 else:
                     print(f"Invalid choice. Enter 1-{len(options)}.")
             elif key.lower() == b'h' and not used_hint:
@@ -627,6 +654,7 @@ class LearnSimulator:
                 for i, option in enumerate(options, 1):
                     print(f"{i}. {option}")
                 used_hint = True
+                start_time = time.time()  # Restart timing after hint
             elif key.lower() == b'h' and used_hint:
                 print("Hint already used for this question.")
             else:
@@ -655,30 +683,33 @@ class LearnSimulator:
         for i, option in enumerate(options, 1):
             print(f"{i}. {option}")
         
-        # Get user input
+        # Get user input with timing
+        start_time = time.time()
         used_hint = False
+        response_time = None
+        
         while True:
             print("Enter choice (1-5), 'h' for hint, or ESC to stop:")
             key = msvcrt.getch()
             if key == b'\x1b':  # ESC key
                 print("\nSession stopped early. Saving progress...")
                 self.save_deck(self.filepath or "deck.csv")
-                return None
+                return None, None
             elif key in [b'1', b'2', b'3', b'4', b'5']:
+                response_time = time.time() - start_time
                 choice = int(key.decode())
                 if choice <= len(options):
                     # If hint was used, reduce score
                     correct = choice == correct_index
                     if correct and used_hint:
                         print(f"{Colors.YELLOW}✓ Correct (with hint): {choice}. {correct_term}{Colors.RESET}")
-                        return "hint_correct"  # Special return value for reduced score
+                        return "hint_correct", response_time  # Special return value for reduced score
                     elif correct:
                         print(f"{Colors.GREEN}✓ Correct: {choice}. {correct_term}{Colors.RESET}")
-                        return True
+                        return True, response_time
                     else:
                         print(f"{Colors.RED}✗ Incorrect! You selected: {choice}. {options[choice-1]}{Colors.RESET}")
                         print(f"The correct answer was: {correct_index}. {correct_term}")
-                        return False
                 else:
                     print(f"Invalid choice. Enter 1-{len(options)}.")
             elif key.lower() == b'h' and not used_hint:
@@ -698,6 +729,7 @@ class LearnSimulator:
                 for i, option in enumerate(options, 1):
                     print(f"{i}. {option}")
                 used_hint = True
+                start_time = time.time()  # Restart timing after hint
             elif key.lower() == b'h' and used_hint:
                 print("Hint already used for this question.")
             else:
@@ -752,30 +784,34 @@ class LearnSimulator:
         for i, option in enumerate(options, 1):
             print(f"{i}. {option}")
         
-        # Get user input
+        # Get user input with timing
+        start_time = time.time()
         used_hint = False
+        response_time = None
+        
         while True:
             print("Enter choice (1-5), 'h' for hint, or ESC to stop:")
             key = msvcrt.getch()
             if key == b'\x1b':  # ESC key
                 print("\nSession stopped early. Saving progress...")
                 self.save_deck(self.filepath or "deck.csv")
-                return None
+                return None, None
             elif key in [b'1', b'2', b'3', b'4', b'5']:
+                response_time = time.time() - start_time
                 choice = int(key.decode())
                 if choice <= len(options):
                     # If hint was used, reduce score
                     correct = choice == correct_index
                     if correct and used_hint:
                         print(f"{Colors.YELLOW}✓ Correct (with hint): {choice}. {correct_formula}{Colors.RESET}")
-                        return "hint_correct"  # Special return value for reduced score
+                        return "hint_correct", response_time  # Special return value for reduced score
                     elif correct:
                         print(f"{Colors.GREEN}✓ Correct: {choice}. {correct_formula}{Colors.RESET}")
-                        return True
+                        return True, response_time
                     else:
                         print(f"{Colors.RED}✗ Incorrect! You selected: {choice}. {options[choice-1]}{Colors.RESET}")
                         print(f"The correct answer was: {correct_index}. {correct_formula}")
-                        return False
+                        return False, response_time
                 else:
                     print(f"Invalid choice. Enter 1-{len(options)}.")
             elif key.lower() == b'h' and not used_hint:
@@ -795,6 +831,7 @@ class LearnSimulator:
                 for i, option in enumerate(options, 1):
                     print(f"{i}. {option}")
                 used_hint = True
+                start_time = time.time()  # Restart timing after hint
             elif key.lower() == b'h' and used_hint:
                 print("Hint already used for this question.")
             else:
