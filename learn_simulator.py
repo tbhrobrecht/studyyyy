@@ -710,6 +710,7 @@ class LearnSimulator:
                     else:
                         print(f"{Colors.RED}✗ Incorrect! You selected: {choice}. {options[choice-1]}{Colors.RESET}")
                         print(f"The correct answer was: {correct_index}. {correct_term}")
+                        return False, response_time
                 else:
                     print(f"Invalid choice. Enter 1-{len(options)}.")
             elif key.lower() == b'h' and not used_hint:
