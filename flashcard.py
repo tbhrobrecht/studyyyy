@@ -36,21 +36,22 @@ class Flashcard:
         # Calculate time-based modifier for ease adjustment
         time_modifier = self._calculate_time_modifier(response_time) if response_time is not None else 1.0
         
-        # Update easiness factor with stage-specific adjustments
-        if stage == 2 and quality >= 4:  # Stage 2 (Definition -> Term) with correct answer
-            # Custom increase for stage 2: +0.25 ease points, modified by time
-            ease_change = 0.25 * time_modifier
-            self.ease = max(1.3, self.ease + ease_change)
-        else:
-            # Standard SM-2 algorithm with time modification
-            # EF':= EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)) * time_modifier
-            base_ease_change = 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
-            ease_change = base_ease_change * time_modifier
-            self.ease = max(1.3, self.ease + ease_change)
-        
-        # Debug output - remove this later if needed
-        # print(f"  Debug: Stage={stage}, Quality={quality}, Time={response_time}s, Time modifier={time_modifier:.3f}, Old ease={old_ease:.3f}, Change={ease_change:.3f}, New ease={self.ease:.3f}")
-        
+        # # Update easiness factor with stage-specific adjustments
+        # if stage == 2 and quality >= 4:  # Stage 2 (Definition -> Term) with correct answer
+        #     # Custom increase for stage 2: +0.25 ease points, modified by time
+        #     ease_change = 0.25 * time_modifier
+        #     self.ease = max(1.3, self.ease + ease_change)
+        # else:
+        #     # Standard SM-2 algorithm with time modification
+        #     # EF':= EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)) * time_modifier
+        #     base_ease_change = 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
+        #     ease_change = base_ease_change * time_modifier
+        #     self.ease = max(1.3, self.ease + ease_change)
+
+        base_ease_change = 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
+        ease_change = 5 * base_ease_change * time_modifier
+        self.ease = max(1.3, self.ease + ease_change)
+         
         self.last_review = datetime.now()
     
     def _calculate_time_modifier(self, response_time):

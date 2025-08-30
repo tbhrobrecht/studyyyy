@@ -4,6 +4,7 @@ import time
 from flashcard import Flashcard
 import msvcrt
 import random
+import difflib
 
 # Color codes for terminal output
 class Colors:
@@ -77,15 +78,19 @@ class LearnSimulator:
         percent_with_hint = (hint_count / total_cards) * 100 if hint_count > 0 else 0
         
         # Stage distribution (current state of all cards)
-        stage_counts = {1: 0, 2: 0, 3: 0}
+        stage_counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
         for card in self.cards:  # Use all cards, not just set_cards
             if card.repetitions == 0 or card.ease < 2.0:
                 stage_counts[1] += 1
             elif card.ease < 3.0:
                 stage_counts[2] += 1
-            else:
+            elif card.ease < 4.0:
                 stage_counts[3] += 1
-        
+            elif card.ease < 5.0:
+                stage_counts[4] += 1
+            else:
+                stage_counts[5] += 1
+
         total_all_cards = len(self.cards)
         stage_percentages = {
             stage: (count / total_all_cards) * 100 
@@ -130,7 +135,9 @@ class LearnSimulator:
         print(f"   📚 Stage 1 (Review Mode): {stats['stage_counts'][1]} cards ({stats['stage_percentages'][1]:.1f}%)")
         print(f"   📖 Stage 2 (Definition → Term): {stats['stage_counts'][2]} cards ({stats['stage_percentages'][2]:.1f}%)")
         print(f"   🎓 Stage 3 (Term → Definition): {stats['stage_counts'][3]} cards ({stats['stage_percentages'][3]:.1f}%)")
-        
+        print(f"   🧠 Stage 4 (Advanced Practice): {stats['stage_counts'][4]} cards ({stats['stage_percentages'][4]:.1f}%)")
+        print(f"   🚀 Stage 5 (Mastery): {stats['stage_counts'][5]} cards ({stats['stage_percentages'][5]:.1f}%)")
+
         # Show trends if we have previous data
         if self.previous_stage_distribution:
             self._display_trends(stats['stage_counts'])
@@ -150,13 +157,13 @@ class LearnSimulator:
     def _display_trends(self, current_stage_counts):
         """Display trends comparing current stage distribution to previous"""
         print(f"\n📈 PROGRESS TRENDS:")
-        
-        for stage in [1, 2, 3]:
+
+        for stage in [1, 2, 3, 4, 5]:
             current = current_stage_counts[stage]
             previous = self.previous_stage_distribution[stage]
             change = current - previous
-            
-            stage_names = {1: "Stage 1 (Review)", 2: "Stage 2 (Def→Term)", 3: "Stage 3 (Term→Def)"}
+
+            stage_names = {1: "Stage 1 (Review)", 2: "Stage 2 (Def→Term)", 3: "Stage 3 (Term→Def)", 4: "Stage 4 (Adv Practice)", 5: "Stage 5 (Mastery)"}
             
             if change > 0:
                 print(f"   📈 {stage_names[stage]}: +{change} cards (getting harder)")
@@ -166,13 +173,18 @@ class LearnSimulator:
                 print(f"   ➡️  {stage_names[stage]}: No change")
         
         # Overall difficulty trend
+        # double check if valid
         difficulty_previous = (self.previous_stage_distribution[1] * 1 + 
                               self.previous_stage_distribution[2] * 2 + 
-                              self.previous_stage_distribution[3] * 3)
+                              self.previous_stage_distribution[3] * 3 + 
+                              self.previous_stage_distribution[4] * 4 + 
+                              self.previous_stage_distribution[5] * 5)
         difficulty_current = (current_stage_counts[1] * 1 + 
                              current_stage_counts[2] * 2 + 
-                             current_stage_counts[3] * 3)
-        
+                             current_stage_counts[3] * 3 + 
+                             current_stage_counts[4] * 4 + 
+                             current_stage_counts[5] * 5)
+
         if difficulty_current > difficulty_previous:
             print(f"   🚀 Overall trend: Advancing to higher stages!")
         elif difficulty_current < difficulty_previous:
@@ -227,6 +239,8 @@ class LearnSimulator:
             print(f"   📚 Stage 1 (Review): {final_stats['stage_counts'][1]} cards ({final_stats['stage_percentages'][1]:.1f}%)")
             print(f"   📖 Stage 2 (Def→Term): {final_stats['stage_counts'][2]} cards ({final_stats['stage_percentages'][2]:.1f}%)")
             print(f"   🎓 Stage 3 (Term→Def): {final_stats['stage_counts'][3]} cards ({final_stats['stage_percentages'][3]:.1f}%)")
+            print(f"   🧠 Stage 4 (Adv Practice): {final_stats['stage_counts'][4]} cards ({final_stats['stage_percentages'][4]:.1f}%)")
+            print(f"   🚀 Stage 5 (Mastery): {final_stats['stage_counts'][5]} cards ({final_stats['stage_percentages'][5]:.1f}%)")
         
         print("🎉" * 20)
 
@@ -394,11 +408,21 @@ class LearnSimulator:
                 print(f"[STAGE 2 - DEFINITION TO TERM]")
                 result = self._quiz_definition_to_term(card)
                 current_stage = 2
-            else:
+            elif card.ease < 4.0:
                 # Stage 3: Show term, choose from 5 definitions
                 print(f"[STAGE 3 - TERM TO DEFINITION]")
                 result = self._quiz_term_to_definition(card)
                 current_stage = 3
+            elif card.ease < 5.0:
+                # Stage 4: Show term, choose from 5 definitions (advanced practice)
+                print(f"[STAGE 4 - ADVANCED PRACTICE]")
+                result = self._type_term_to_definition(card)
+                current_stage = 4
+            else:
+                # Stage 5: Show term, choose from 5 definitions (mastery)
+                print(f"[STAGE 5 - MASTERY]")
+                result = self._type_definition_to_term(card)
+                current_stage = 5
             
             # Handle the result - some methods return tuples, others just values
             if result is None:  # User pressed ESC
@@ -437,9 +461,12 @@ class LearnSimulator:
                 print("Status: Stage 1 (Review Mode)")
             elif card.ease < 3.0:
                 print("Status: Stage 2 (Definition → Term)")
-            else:
+            elif card.ease < 4.0:
                 print("Status: Stage 3 (Term → Definition)")
-                
+            elif card.ease < 5.0:
+                print("Status: Stage 4 (Adv Practice)")
+            else:
+                print("Status: Stage 5 (Mastery)")
             print("-" * 30)
             
             set_completed_cards.append(card)
@@ -475,12 +502,22 @@ class LearnSimulator:
                 print(f"[STAGE 2 - DEFINITION TO TERM]")
                 result = self._quiz_definition_to_term(card)
                 current_stage = 2
-            else:
+            elif card.ease < 4.0:
                 # Stage 3: Show term, choose from 5 definitions
                 print(f"[STAGE 3 - TERM TO DEFINITION]")
                 result = self._quiz_term_to_definition(card)
                 current_stage = 3
-            
+            elif card.ease < 5.0:
+                # Stage 4: Advanced review, more challenging
+                print(f"[STAGE 4 - ADVANCED REVIEW]")
+                result = self._type_term_to_definition(card)
+                current_stage = 4
+            else:
+                # Stage 5: Expert review, highest difficulty
+                print(f"[STAGE 5 - EXPERT REVIEW]")
+                result = self._type_definition_to_term(card)
+                current_stage = 5
+
             # Handle the result - some methods return tuples, others just values
             if result is None:  # User pressed ESC
                 return None
@@ -502,7 +539,7 @@ class LearnSimulator:
                 correct_count += 1
                 hint_count += 1
             elif correct_answer:
-                q = 5  # Perfect recall for correct answer (changed from 4 to 5)
+                q = 5  # Perfect recall for correct answer
                 print(f"{Colors.GREEN}✓ Correct!{Colors.RESET}")
                 was_correct = True
                 correct_count += 1
@@ -522,9 +559,13 @@ class LearnSimulator:
                 print("Status: Stage 1 (Review Mode)")
             elif card.ease < 3.0:
                 print("Status: Stage 2 (Definition → Term)")
-            else:
+            elif card.ease < 4.0:
                 print("Status: Stage 3 (Term → Definition)")
-                
+            elif card.ease < 5.0:
+                print("Status: Stage 4 (Advanced Review)")
+            else:
+                print("Status: Stage 5 (Expert Review)")
+
             print("-" * 30)
             
             set_completed_cards.append(card)
@@ -735,6 +776,89 @@ class LearnSimulator:
                 print("Hint already used for this question.")
             else:
                 print("Invalid input. Enter 1-5, 'h' for hint, or ESC.")
+
+    def _type_term_to_definition(self, card):
+        """Phase 4: Show term, user types the correct definition (fuzzy match allowed)"""
+        print(f"Term: {card.term}")
+
+        # Show formula if it exists
+        if hasattr(card, 'formula') and card.formula:
+            print(f"Formula: {card.formula}")
+
+        # Get user input with timing
+        start_time = time.time()
+        response_time = None
+
+        print("Type the correct definition (or press ESC to stop):")
+        user_input = ""
+        while True:
+            char = msvcrt.getch()
+            if char == b'\x1b':  # ESC key
+                print("\nSession stopped early. Saving progress...")
+                self.save_deck(self.filepath or "deck.csv")
+                return None
+            elif char in [b'\r', b'\n']:  # Enter key
+                break
+            elif char == b'\x08':  # Backspace
+                if user_input:
+                    user_input = user_input[:-1]
+                    # Move cursor back, overwrite with space, move back again
+                    print('\b \b', end='', flush=True)
+            else:
+                decoded_char = char.decode('utf-8', errors='ignore')
+                user_input += decoded_char
+                print(decoded_char, end='', flush=True)
+                
+        # Fuzzy match: Accept if similarity > 0.7
+        similarity = difflib.SequenceMatcher(None, user_input.lower(), card.definition.lower()).ratio()
+        response_time = time.time() - start_time
+        if similarity > 0.7:
+            print(f"\n{Colors.GREEN}✓ Correct! The correct definition was: {card.definition}{Colors.RESET}")
+            return True, response_time
+        else:
+            print(f"\n{Colors.RED}✗ Incorrect! The correct definition was: {card.definition}{Colors.RESET}")
+            return False, response_time
+
+    def _type_definition_to_term(self, card):
+        """Phase 4: Show definition, user types the correct term (fuzzy match allowed)"""
+        print(f"Definition: {card.definition}")
+
+        # Show formula if it exists
+        if hasattr(card, 'formula') and card.formula:
+            print(f"Formula: {card.formula}")
+
+        # Get user input with timing
+        start_time = time.time()
+        response_time = None
+
+        print("Type the correct term (or press ESC to stop):")
+        user_input = ""
+        while True:
+            char = msvcrt.getch()
+            if char == b'\x1b':  # ESC key
+                print("\nSession stopped early. Saving progress...")
+                self.save_deck(self.filepath or "deck.csv")
+                return None
+            elif char in [b'\r', b'\n']:  # Enter key
+                break
+            elif char == b'\x08':  # Backspace
+                if user_input:
+                    user_input = user_input[:-1]
+                    print('\b \b', end='', flush=True)
+            else:
+                decoded_char = char.decode('utf-8', errors='ignore')
+                user_input += decoded_char
+                print(decoded_char, end='', flush=True)
+                
+        # Fuzzy match: Accept if similarity > 0.8
+        similarity = difflib.SequenceMatcher(None, user_input.lower(), card.term.lower()).ratio()
+        response_time = time.time() - start_time
+        if similarity > 0.8:
+            print(f"\n{Colors.GREEN}✓ Correct! The correct term was: {card.term}{Colors.RESET}")
+            return True, response_time
+        else:
+            print(f"\n{Colors.RED}✗ Incorrect! The correct term was: {card.term}{Colors.RESET}")
+            return False, response_time
 
     def _quiz_term_to_formula(self, card):
         """Quiz mode: Show term, choose correct formula (for cards with formulas)"""
