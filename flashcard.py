@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import math
 
 class Flashcard:
     def __init__(self, term, definition, ease=2.5, interval=1, repetitions=0, last_review=None, formula=None):
@@ -21,7 +22,7 @@ class Flashcard:
         
         if quality < 3:
             # Reset repetition
-            self.repetitions = 0
+            self.repetitions = math.floor(self.repetitions / 2)
             self.interval = 1
         else:
             # Increase repetition
@@ -36,18 +37,7 @@ class Flashcard:
         # Calculate time-based modifier for ease adjustment
         time_modifier = self._calculate_time_modifier(response_time) if response_time is not None else 1.0
         
-        # # Update easiness factor with stage-specific adjustments
-        # if stage == 2 and quality >= 4:  # Stage 2 (Definition -> Term) with correct answer
-        #     # Custom increase for stage 2: +0.25 ease points, modified by time
-        #     ease_change = 0.25 * time_modifier
-        #     self.ease = max(1.3, self.ease + ease_change)
-        # else:
-        #     # Standard SM-2 algorithm with time modification
-        #     # EF':= EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)) * time_modifier
-        #     base_ease_change = 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
-        #     ease_change = base_ease_change * time_modifier
-        #     self.ease = max(1.3, self.ease + ease_change)
-
+        # Standard SM-2 algorithm with time modification
         base_ease_change = 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
         ease_change = 5 * base_ease_change * time_modifier
         self.ease = max(1.3, self.ease + ease_change)
