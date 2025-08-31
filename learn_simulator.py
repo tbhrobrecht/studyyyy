@@ -727,9 +727,13 @@ class LearnSimulator:
         # Fuzzy match: Accept if similarity > 0.7
         similarity = difflib.SequenceMatcher(None, user_input.lower(), card.definition.lower()).ratio()
         response_time = time.time() - start_time
+        print("\n", round(similarity, 2))
         if similarity > 0.7:
             print(f"\n{Colors.GREEN}✓ Correct! The correct definition was: {card.definition}{Colors.RESET}")
             return True, response_time
+        elif similarity > 0.3:
+            print(f"\n{Colors.YELLOW}⚠️ Almost! The correct definition was: {card.definition}{Colors.RESET}")
+            return "hint_correct", response_time
         else:
             print(f"\n{Colors.RED}✗ Incorrect! The correct definition was: {card.definition}{Colors.RESET}")
             return False, response_time
@@ -765,12 +769,16 @@ class LearnSimulator:
                 user_input += decoded_char
                 print(decoded_char, end='', flush=True)
                 
-        # Fuzzy match: Accept if similarity > 0.8
+        # Fuzzy match: Accept if similarity > 0.7
         similarity = difflib.SequenceMatcher(None, user_input.lower(), card.term.lower()).ratio()
         response_time = time.time() - start_time
-        if similarity > 0.8:
+        print("\n", round(similarity, 2))
+        if similarity > 0.7:
             print(f"\n{Colors.GREEN}✓ Correct! The correct term was: {card.term}{Colors.RESET}")
             return True, response_time
+        elif similarity > 0.3:
+            print(f"\n{Colors.YELLOW}⚠️ Almost! The correct term was: {card.term}{Colors.RESET}")
+            return "hint_correct", response_time
         else:
             print(f"\n{Colors.RED}✗ Incorrect! The correct term was: {card.term}{Colors.RESET}")
             return False, response_time
