@@ -5,6 +5,18 @@ from flashcard import Flashcard
 import msvcrt
 import random
 import difflib
+import sys
+
+# Safe print function for Windows console
+def safe_print(text):
+    """Print text safely, replacing problematic Unicode characters for Windows console"""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        # Replace Unicode symbols with ASCII equivalents
+        safe_text = text.replace('✓', 'OK').replace('✗', 'X').replace('📖', '[BOOK]').replace('🎓', '[GRAD]')
+        safe_text = safe_text.replace('→', '->').replace('←', '<-')
+        print(safe_text)
 
 # Color codes for terminal output
 class Colors:
@@ -28,19 +40,40 @@ class LearnSimulator:
         try:
             with open(filepath, newline='', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
+                fieldnames = reader.fieldnames
+                
+                # Detect format based on columns
+                mcq_columns = {'question', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer'}
+                is_mcq = mcq_columns.issubset(set(fieldnames or []))
+                
                 for row in reader:
-                    # Check if formula column exists and has content
-                    formula = row.get('formula', '').strip() if row.get('formula') else None
-                    
-                    cards.append(Flashcard(
-                        term=row['term'],
-                        definition=row['definition'],
-                        ease=float(row.get('ease', 2.5)),
-                        interval=1,  # Default interval since we're removing this from CSV
-                        repetitions=int(row.get('repetitions', 0)),
-                        last_review=row.get('last_review'),
-                        formula=formula  # Add formula support
-                    ))
+                    if is_mcq:
+                        # MCQ format
+                        cards.append(Flashcard(
+                            question=row['question'],
+                            option_a=row['option_a'],
+                            option_b=row['option_b'],
+                            option_c=row['option_c'],
+                            option_d=row['option_d'],
+                            correct_answer=row['correct_answer'],
+                            ease=float(row.get('ease', 2.5)),
+                            interval=1,  # Default interval since we're removing this from CSV
+                            repetitions=int(row.get('repetitions', 0)),
+                            last_review=row.get('last_review')
+                        ))
+                    else:
+                        # Vocabulary format
+                        formula = row.get('formula', '').strip() if row.get('formula') else None
+                        
+                        cards.append(Flashcard(
+                            term=row['term'],
+                            definition=row['definition'],
+                            ease=float(row.get('ease', 2.5)),
+                            interval=1,  # Default interval since we're removing this from CSV
+                            repetitions=int(row.get('repetitions', 0)),
+                            last_review=row.get('last_review'),
+                            formula=formula  # Add formula support
+                        ))
         except FileNotFoundError:
             print(f"File not found: {filepath}")
             exit(1)
@@ -48,13 +81,17 @@ class LearnSimulator:
 
     def save_deck(self, filepath):
         with open(filepath, 'w', newline='', encoding='utf-8') as f:
-            # Check if any cards have formulas to determine fieldnames
-            has_formulas = any(hasattr(card, 'formula') and card.formula for card in self.cards)
-            
-            if has_formulas:
-                fieldnames = ['term', 'definition', 'formula', 'ease', 'repetitions', 'last_review']
+            # Determine format based on first card
+            if self.cards and self.cards[0].card_type == 'mcq':
+                fieldnames = ['question', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer', 'ease', 'repetitions', 'last_review']
             else:
-                fieldnames = ['term', 'definition', 'ease', 'repetitions', 'last_review']
+                # Check if any cards have formulas to determine fieldnames
+                has_formulas = any(hasattr(card, 'formula') and card.formula for card in self.cards)
+                
+                if has_formulas:
+                    fieldnames = ['term', 'definition', 'formula', 'ease', 'repetitions', 'last_review']
+                else:
+                    fieldnames = ['term', 'definition', 'ease', 'repetitions', 'last_review']
                 
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
@@ -124,8 +161,8 @@ class LearnSimulator:
         # Performance in this set
         print(f"📊 SET PERFORMANCE:")
         print(f"   Total cards in set: {stats['total_cards']}")
-        print(f"   {Colors.GREEN}✓ Correct answers: {stats['correct_count']} ({stats['percent_correct']:.1f}%){Colors.RESET}")
-        print(f"   {Colors.RED}✗ Incorrect answers: {stats['incorrect_count']} ({stats['percent_incorrect']:.1f}%){Colors.RESET}")
+        safe_print(f"   {Colors.GREEN}✓ Correct answers: {stats['correct_count']} ({stats['percent_correct']:.1f}%){Colors.RESET}")
+        safe_print(f"   {Colors.RED}✗ Incorrect answers: {stats['incorrect_count']} ({stats['percent_incorrect']:.1f}%){Colors.RESET}")
         if stats['hint_count'] > 0:
             print(f"   {Colors.YELLOW}💡 Correct with hint: {stats['hint_count']} ({stats['percent_with_hint']:.1f}%){Colors.RESET}")
         
@@ -408,29 +445,41 @@ class LearnSimulator:
             current_stage = None
             response_time = None
             if card.repetitions == 0 or card.ease < 2.0:
-                # Stage 1: Show term and definition (first time or very difficult)
+                # Stage 1: Show question and answer (first time or very difficult)
                 print(f"[STAGE 1 - REVIEW MODE]")
                 result = self._show_card_review_mode(card)
                 current_stage = 1
             elif card.ease < 3.0:
-                # Stage 2: Show definition, choose from 5 terms
-                print(f"[STAGE 2 - DEFINITION TO TERM]")
-                result = self._quiz_definition_to_term(card)
+                # Stage 2: Show question with multiple choices (easy mode for MCQ, definition to term for vocab)
+                print(f"[STAGE 2 - BASIC PRACTICE]")
+                if card.card_type == 'mcq':
+                    result = self._mcq_practice_mode(card)
+                else:
+                    result = self._quiz_definition_to_term(card)
                 current_stage = 2
             elif card.ease < 4.0:
-                # Stage 3: Show term, choose from 5 definitions
-                print(f"[STAGE 3 - TERM TO DEFINITION]")
-                result = self._quiz_term_to_definition(card)
+                # Stage 3: Show question with multiple choices (for MCQ) or term to definition (for vocab)
+                print(f"[STAGE 3 - INTERMEDIATE PRACTICE]")
+                if card.card_type == 'mcq':
+                    result = self._mcq_practice_mode(card)
+                else:
+                    result = self._quiz_term_to_definition(card)
                 current_stage = 3
             elif card.ease < 5.0:
-                # Stage 4: Advanced review, more challenging
-                print(f"[STAGE 4 - ADVANCED REVIEW]")
-                result = self._type_term_to_definition(card)
+                # Stage 4: Advanced MCQ (no hints) or typing for vocab
+                print(f"[STAGE 4 - ADVANCED PRACTICE]")
+                if card.card_type == 'mcq':
+                    result = self._mcq_practice_mode(card, allow_hints=False)
+                else:
+                    result = self._type_term_to_definition(card)
                 current_stage = 4
             else:
-                # Stage 5: Expert review, highest difficulty
-                print(f"[STAGE 5 - EXPERT REVIEW]")
-                result = self._type_definition_to_term(card)
+                # Stage 5: Expert MCQ (no hints) or typing for vocab
+                print(f"[STAGE 5 - EXPERT PRACTICE]")
+                if card.card_type == 'mcq':
+                    result = self._mcq_practice_mode(card, allow_hints=False)
+                else:
+                    result = self._type_definition_to_term(card)
                 current_stage = 5
 
             # Handle the result - some methods return tuples, others just values
@@ -453,14 +502,25 @@ class LearnSimulator:
                 was_correct = True
                 correct_count += 1
                 hint_count += 1
+            elif isinstance(correct_answer, tuple) and correct_answer[0] == "partial":
+                # Handle partial credit scoring
+                partial_score = correct_answer[1]  # Score between 0 and 1
+                q = 1 + (partial_score * 4)  # Scale to 1-5 range
+                print(f"{Colors.YELLOW}◐ Partial Credit ({int(partial_score * 100)}%)!{Colors.RESET}")
+                if partial_score >= 0.5:
+                    was_correct = True
+                    correct_count += 1
+                else:
+                    incorrect_cards.append(card)
+                    incorrect_count += 1
             elif correct_answer:
                 q = 5  # Perfect recall for correct answer
-                print(f"{Colors.GREEN}✓ Correct!{Colors.RESET}")
+                safe_print(f"{Colors.GREEN}✓ Correct!{Colors.RESET}")
                 was_correct = True
                 correct_count += 1
             else:
                 q = 1  # Poor recall for incorrect answer
-                print(f"{Colors.RED}✗ Incorrect!{Colors.RESET}")
+                safe_print(f"{Colors.RED}✗ Incorrect!{Colors.RESET}")
                 incorrect_cards.append(card)
                 incorrect_count += 1
                 
@@ -492,14 +552,19 @@ class LearnSimulator:
         return set_completed_cards, incorrect_cards
     
     def _show_card_review_mode(self, card):
-        """Stage 1: Show term and definition, user acknowledges"""
+        """Stage 1: Show question and answer, user acknowledges"""
         start_time = time.time()
-        print(f"Term: {card.term}")
-        print(f"Definition: {card.definition}")
         
-        # Show formula if it exists
-        if hasattr(card, 'formula') and card.formula:
-            print(f"Formula: {card.formula}")
+        if card.card_type == 'mcq':
+            print(f"Question: {card.question}")
+            print(f"Correct Answer: {card.get_answer_text()}")
+        else:
+            print(f"Term: {card.term}")
+            print(f"Definition: {card.definition}")
+            
+            # Show formula if it exists
+            if hasattr(card, 'formula') and card.formula:
+                print(f"Formula: {card.formula}")
         print()
         
         while True:
@@ -511,14 +576,18 @@ class LearnSimulator:
                 return None
             elif key == b' ':  # SPACE key
                 response_time = time.time() - start_time
-                print("✓ Reviewed!")
+                safe_print("✓ Reviewed!")
                 return True, response_time  # Return tuple: (result, response_time)
             elif key.lower() == b'r':  # R key to repeat
                 print("\n" + "="*40)
-                print(f"Term: {card.term}")
-                print(f"Definition: {card.definition}")
-                if hasattr(card, 'formula') and card.formula:
-                    print(f"Formula: {card.formula}")
+                if card.card_type == 'mcq':
+                    print(f"Question: {card.question}")
+                    print(f"Correct Answer: {card.get_answer_text()}")
+                else:
+                    print(f"Term: {card.term}")
+                    print(f"Definition: {card.definition}")
+                    if hasattr(card, 'formula') and card.formula:
+                        print(f"Formula: {card.formula}")
                 print("="*40)
             else:
                 print("Invalid input. Press SPACE to continue, 'r' to repeat, or ESC.")
@@ -884,3 +953,206 @@ class LearnSimulator:
                 print("Hint already used for this question.")
             else:
                 print("Invalid input. Enter 1-5, 'h' for hint, or ESC.")
+    
+    def _mcq_practice_mode(self, card, allow_hints=True):
+        """MCQ practice mode: Show question with multiple choice options"""
+        print(f"Question: {card.question}")
+        
+        # Check if multiple answers are expected
+        is_multiple = card.has_multiple_correct_answers()
+        is_true_false = card.is_true_false_question()
+        
+        if is_multiple:
+            print("Choose ALL correct answers (multiple answers possible):")
+            if is_true_false:
+                print("Enter your answers separated by commas (e.g., '1,2'):")
+            else:
+                print("Enter your answers separated by commas (e.g., '1,3' or '2,4'):")
+        else:
+            if is_true_false:
+                print("Choose True or False:")
+            else:
+                print("Choose the correct answer:")
+        
+        # Get all options and available letters
+        options = card.get_all_options()
+        correct_answers_set = card.get_correct_answers_set()
+        available_letters = card.get_available_option_letters()
+        
+        # Display options with numbers (dynamic based on available options)
+        for i, letter in enumerate(available_letters, 1):
+            print(f"{i}. {options[letter]}")
+        
+        # Get user input with timing
+        start_time = time.time()
+        used_hint = False
+        response_time = None
+        max_option = len(available_letters)
+        available_options = list(range(1, max_option + 1))
+        
+        while True:
+            hint_text = ", 'h' for hint" if allow_hints and not used_hint else ""
+            if is_multiple:
+                if is_true_false:
+                    print(f"Enter your choices (e.g., '1,2'){hint_text}, or ESC to stop:")
+                else:
+                    print(f"Enter your choices (e.g., '1,3' or '2'){hint_text}, or ESC to stop:")
+            else:
+                if is_true_false:
+                    print(f"Enter choice (1-2){hint_text}, or ESC to stop:")
+                else:
+                    print(f"Enter choice (1-{max_option}){hint_text}, or ESC to stop:")
+                
+            # For multiple answers, we need to read a string input
+            if is_multiple:
+                user_input = ""
+                while True:
+                    char = msvcrt.getch()
+                    if char == b'\x1b':  # ESC key
+                        print("\nSession stopped early. Saving progress...")
+                        self.save_deck(self.filepath or "deck.csv")
+                        return None, None
+                    elif char in [b'\r', b'\n']:  # Enter key
+                        break
+                    elif char == b'\x08':  # Backspace
+                        if user_input:
+                            user_input = user_input[:-1]
+                            print('\b \b', end='', flush=True)
+                    else:
+                        decoded_char = char.decode('utf-8', errors='ignore')
+                        user_input += decoded_char
+                        print(decoded_char, end='', flush=True)
+                
+                print()  # New line after input
+                
+                # Handle hint for multiple choice
+                if user_input.lower() == 'h' and allow_hints and not used_hint:
+                    # Remove some wrong options for hint
+                    wrong_numbers = [i+1 for i, letter in enumerate(available_letters) 
+                                   if letter not in correct_answers_set and i+1 in available_options]
+                    numbers_to_remove = random.sample(wrong_numbers, min(max(1, len(wrong_numbers)//2), len(wrong_numbers)))
+                    available_options = [num for num in available_options if num not in numbers_to_remove]
+                    
+                    print("\nHint used! Here are the remaining options:")
+                    for num in available_options:
+                        letter = available_letters[num - 1]
+                        print(f"{num}. {options[letter]}")
+                    used_hint = True
+                    start_time = time.time()
+                    continue
+                elif user_input.lower() == 'h' and (not allow_hints or used_hint):
+                    if not allow_hints:
+                        print("Hints not available at this level.")
+                    else:
+                        print("Hint already used for this question.")
+                    continue
+                
+                # Parse multiple selections - ORDER INDEPENDENT
+                # Supports formats: "1,3", "3,1", "1 3", "3 1", "1, 3", etc.
+                # All variations are treated as equivalent sets
+                try:
+                    # Parse input like "1,3,4" or "1 3 4" or "1, 3, 4" or "1,2" for True/False
+                    # Order doesn't matter - "1,3" and "3,1" produce same result
+                    selected_numbers = []
+                    for part in user_input.replace(',', ' ').split():
+                        num = int(part.strip())
+                        if 1 <= num <= max_option and num in available_options:
+                            selected_numbers.append(num)
+                    
+                    if not selected_numbers:
+                        print(f"Please enter valid option numbers (1-{max_option}).")
+                        continue
+                        
+                    response_time = time.time() - start_time
+                    selected_letters = [available_letters[num - 1] for num in selected_numbers]
+                    
+                    # Calculate partial score
+                    score, is_perfect, feedback = card.calculate_partial_score(selected_letters)
+                    
+                    # Display results
+                    if is_perfect:
+                        if used_hint:
+                            safe_print(f"{Colors.YELLOW}✓ Perfect (with hint): {user_input}. Score: 100%{Colors.RESET}")
+                            return "hint_correct", response_time
+                        else:
+                            safe_print(f"{Colors.GREEN}✓ Perfect: {user_input}. Score: 100%{Colors.RESET}")
+                            return True, response_time
+                    elif score > 0:
+                        score_percent = int(score * 100)
+                        color = Colors.YELLOW if score >= 0.5 else Colors.RED
+                        safe_print(f"{color}◐ Partial Credit: {user_input}. Score: {score_percent}%{Colors.RESET}")
+                        
+                        # Show detailed feedback
+                        if feedback['correctly_selected'] > 0:
+                            correct_nums = [available_letters.index(ans) + 1 for ans in feedback['correct_answers'] if ans in selected_letters]
+                            safe_print(f"  ✓ Correct: {', '.join(map(str, correct_nums))}")
+                        if feedback['wrong_answers']:
+                            wrong_nums = [available_letters.index(ans) + 1 for ans in feedback['wrong_answers']]
+                            safe_print(f"  ✗ Incorrect: {', '.join(map(str, wrong_nums))}")
+                        if feedback['missed_answers']:
+                            missed_nums = [available_letters.index(ans) + 1 for ans in feedback['missed_answers']]
+                            safe_print(f"  ○ Missed: {', '.join(map(str, missed_nums))}")
+                        
+                        # Return partial score as a special value
+                        return ("partial", score), response_time
+                    else:
+                        safe_print(f"{Colors.RED}✗ Incorrect: {user_input}. Score: 0%{Colors.RESET}")
+                        correct_nums = [available_letters.index(ans) + 1 for ans in feedback['correct_answers']]
+                        print(f"The correct answers were: {', '.join(map(str, correct_nums))}")
+                        return False, response_time
+                        
+                except ValueError:
+                    if is_true_false:
+                        print("Please enter valid numbers (1 or 2).")
+                    else:
+                        print(f"Please enter valid numbers separated by commas (1-{max_option}).")
+                    continue
+            else:
+                # Single answer mode (original logic)
+                key = msvcrt.getch()
+                if key == b'\x1b':  # ESC key
+                    print("\nSession stopped early. Saving progress...")
+                    self.save_deck(self.filepath or "deck.csv")
+                    return None, None
+                elif key in [b'1', b'2', b'3', b'4'] and int(key.decode()) <= max_option:
+                    choice_num = int(key.decode())
+                    if choice_num in available_options:
+                        response_time = time.time() - start_time
+                        choice_letter = available_letters[choice_num - 1]
+                        
+                        if choice_letter in correct_answers_set:
+                            if used_hint:
+                                print(f"{Colors.YELLOW}✓ Correct (with hint): {choice_num}. {options[choice_letter]}{Colors.RESET}")
+                                return "hint_correct", response_time
+                            else:
+                                print(f"{Colors.GREEN}✓ Correct: {choice_num}. {options[choice_letter]}{Colors.RESET}")
+                                return True, response_time
+                        else:
+                            print(f"{Colors.RED}✗ Incorrect! You selected: {choice_num}. {options[choice_letter]}{Colors.RESET}")
+                            correct_nums = [available_letters.index(ans) + 1 for ans in correct_answers_set]
+                            print(f"The correct answer was: {', '.join(map(str, correct_nums))}")
+                            return False, response_time
+                    else:
+                        print(f"Option {choice_num} not available.")
+                        
+                elif key.lower() == b'h' and allow_hints and not used_hint:
+                    # For single MCQ, show a hint by eliminating wrong options
+                    wrong_numbers = [i+1 for i, letter in enumerate(available_letters) 
+                                   if letter not in correct_answers_set and i+1 in available_options]
+                    numbers_to_remove = random.sample(wrong_numbers, min(max(1, len(wrong_numbers)//2), len(wrong_numbers)))
+                    available_options = [num for num in available_options if num not in numbers_to_remove]
+                    
+                    print("\nHint used! Here are the remaining options:")
+                    for num in available_options:
+                        letter = available_letters[num - 1]
+                        print(f"{num}. {options[letter]}")
+                    used_hint = True
+                    start_time = time.time()  # Restart timing after hint
+                    
+                elif key.lower() == b'h' and (not allow_hints or used_hint):
+                    if not allow_hints:
+                        print("Hints not available at this level.")
+                    else:
+                        print("Hint already used for this question.")
+                else:
+                    print("Invalid input. Enter 1-4, or ESC.")

@@ -7,6 +7,26 @@ import glob
 import csv
 from datetime import datetime
 
+def detect_deck_format(filepath):
+    """Detect whether a deck is vocabulary or MCQ format"""
+    try:
+        with open(filepath, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames
+            
+            # Check for MCQ format columns
+            mcq_columns = {'question', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer'}
+            vocab_columns = {'term', 'definition'}
+            
+            if mcq_columns.issubset(set(fieldnames or [])):
+                return 'mcq'
+            elif vocab_columns.issubset(set(fieldnames or [])):
+                return 'vocabulary'
+            else:
+                return 'unknown'
+    except:
+        return 'unknown'
+
 def list_all_decks():
     """List all available decks with statistics"""
     print("\n=== DECK OVERVIEW ===")
@@ -22,11 +42,12 @@ def list_all_decks():
         print("No practice decks found!")
         return
         
-    print(f"{'Deck Name':<20} {'Cards':<8} {'Avg Ease':<10} {'Avg Reps':<10} {'Last Modified'}")
-    print("-" * 70)
+    print(f"{'Deck Name':<20} {'Type':<12} {'Cards':<8} {'Avg Ease':<10} {'Avg Reps':<10} {'Last Modified'}")
+    print("-" * 80)
     
     for deck_path in sorted(decks):
         deck_name = os.path.splitext(os.path.basename(deck_path))[0]
+        deck_format = detect_deck_format(deck_path)
         
         try:
             with open(deck_path, 'r', newline='', encoding='utf-8') as f:
@@ -34,7 +55,7 @@ def list_all_decks():
                 cards = list(reader)
                 
             if not cards:
-                print(f"{deck_name:<20} {'0':<8} {'N/A':<10} {'N/A':<10} {'N/A'}")
+                print(f"{deck_name:<20} {deck_format:<12} {'0':<8} {'N/A':<10} {'N/A':<10} {'N/A'}")
                 continue
                 
             card_count = len(cards)
@@ -45,10 +66,10 @@ def list_all_decks():
             mod_time = datetime.fromtimestamp(os.path.getmtime(deck_path))
             mod_str = mod_time.strftime("%Y-%m-%d")
             
-            print(f"{deck_name:<20} {card_count:<8} {avg_ease:<10.2f} {avg_reps:<10.1f} {mod_str}")
+            print(f"{deck_name:<20} {deck_format:<12} {card_count:<8} {avg_ease:<10.2f} {avg_reps:<10.1f} {mod_str}")
             
         except Exception as e:
-            print(f"{deck_name:<20} {'ERROR':<8} {str(e)}")
+            print(f"{deck_name:<20} {deck_format:<12} {'ERROR':<8} {str(e)}")
 
 def list_templates():
     """List all available templates"""
@@ -65,11 +86,12 @@ def list_templates():
         print("No vocabulary templates found!")
         return
         
-    print(f"{'Template Name':<20} {'Cards':<8} {'Description'}")
-    print("-" * 50)
+    print(f"{'Template Name':<20} {'Type':<12} {'Cards':<8} {'Description'}")
+    print("-" * 60)
     
     for template_path in sorted(templates):
         template_name = os.path.splitext(os.path.basename(template_path))[0]
+        template_format = detect_deck_format(template_path)
         
         try:
             with open(template_path, 'r', newline='', encoding='utf-8') as f:
@@ -78,17 +100,20 @@ def list_templates():
                 
             card_count = len(cards)
             
-            # Try to get the first few terms as description
+            # Try to get the first few items as description based on format
             if cards:
-                first_terms = [card.get('term', '') for card in cards[:3]]
-                description = ', '.join(first_terms) + ('...' if len(cards) > 3 else '')
+                if template_format == 'mcq':
+                    first_items = [card.get('question', '') for card in cards[:3]]
+                else:
+                    first_items = [card.get('term', '') for card in cards[:3]]
+                description = ', '.join(first_items) + ('...' if len(cards) > 3 else '')
             else:
                 description = 'Empty template'
                 
-            print(f"{template_name:<20} {card_count:<8} {description}")
+            print(f"{template_name:<20} {template_format:<12} {card_count:<8} {description}")
             
         except Exception as e:
-            print(f"{template_name:<20} {'ERROR':<8} {str(e)}")
+            print(f"{template_name:<20} {'unknown':<12} {'ERROR':<8} {str(e)}")
 
 def deck_progress_report(deck_name):
     """Show detailed progress for a specific deck"""

@@ -7,6 +7,7 @@ import os
 import glob
 import csv
 from learn_simulator import LearnSimulator
+from deck_manager import detect_deck_format
 
 def discover_templates():
     """Find all available vocabulary templates"""
@@ -57,35 +58,50 @@ def select_deck():
     templates = discover_templates()
     
     print("\n=== FLASHCARD DECK MANAGER ===")
-    print("Available vocabulary sets:")
+    print("Available learning sets:")
     
     if not templates:
-        print("No vocabulary templates found in vocabulary_template folder!")
+        print("No learning templates found in vocabulary_template folder!")
         return []
     
-    # Show all available templates with their status
-    print(f"{'#':<3} {'Template':<15} {'Status':<12} {'Description'}")
-    print("-" * 50)
+    # Show all available templates with their status and type
+    print(f"{'#':<3} {'Template':<15} {'Type':<12} {'Status':<12} {'Description'}")
+    print("-" * 65)
     
     for i, template in enumerate(templates, 1):
         deck_path = get_deck_path_for_template(template)
         status = "Initialized" if os.path.exists(deck_path) else "New"
         
+        # Detect template format
+        template_path = os.path.join("vocabulary_template", f"{template}.csv")
+        template_format = detect_deck_format(template_path)
+        format_display = "Vocabulary" if template_format == "vocabulary" else "MCQ" if template_format == "mcq" else "Unknown"
+        
         # Try to get a preview of the template
         try:
-            template_path = os.path.join("vocabulary_template", f"{template}.csv")
             with open(template_path, 'r', newline='', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 first_row = next(reader, None)
-                description = first_row.get('term', 'N/A') if first_row else 'Empty'
+                if template_format == 'mcq':
+                    description = first_row.get('question', 'N/A') if first_row else 'Empty'
+                else:
+                    description = first_row.get('term', 'N/A') if first_row else 'Empty'
         except:
             description = 'N/A'
+        
+        # Handle Unicode characters for Windows console
+        try:
+            description_safe = description[:50] if description else 'N/A'
+            # Replace problematic Unicode characters
+            description_safe = description_safe.encode('ascii', 'replace').decode('ascii')
+        except:
+            description_safe = 'N/A'
             
-        print(f"{i:<3} {template:<15} {status:<12} {description}...")
+        print(f"{i:<3} {template:<15} {format_display:<12} {status:<12} {description_safe}...")
     
     # Single template selection only
     try:
-        template_choice = int(input(f"\nSelect vocabulary set (1-{len(templates)}): ")) - 1
+        template_choice = int(input(f"\nSelect learning set (1-{len(templates)}): ")) - 1
         if 0 <= template_choice < len(templates):
             template_name = templates[template_choice]
             deck_path = initialize_deck_from_template(template_name)
