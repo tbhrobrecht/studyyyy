@@ -291,8 +291,9 @@ class LearnSimulator:
 
         print("Press ESC at any time to stop early and save progress.\n")
 
-        # if any card in the csv has repition == 0
-        if any(card.repetitions == 0 for card in all_cards):
+        # Check if any card is still in Stage 1 (needs initial review)
+        # Stage 1 condition: repetitions == 0 OR ease < 2.0
+        if any(card.repetitions == 0 or card.ease < 2.0 for card in all_cards):
             # Phase 1: Sets of 7 new terms + same 7 terms repeated
             print("=== PHASE 1: Initial Review ===")
             print("Each set: 7 new terms + same 7 terms repeated\n")
@@ -362,8 +363,9 @@ class LearnSimulator:
             recently_practiced = set()
 
             while True:
-                # Select hardest cards only from reviewed cards (repetitions > 0).
-                hardest_cards = sorted([c for c in self.cards if c.repetitions > 0], key=lambda c: c.ease)[:8]
+                # Select hardest cards from ALL cards (since all cards can be practiced in stages 2-5)
+                # Sort by ease (lowest = most difficult) and take up to 8 hardest cards
+                hardest_cards = sorted(self.cards, key=lambda c: c.ease)[:8]
 
                 # Remaining candidates (excluding hardest)
                 remaining_candidates = [c for c in self.cards if c not in hardest_cards]

@@ -23,11 +23,13 @@ Open the terminal and run `python main.py` from the repository directory
 ## MCQ Format Examples
 
 ### True/False Questions:
+**Standardized Format**: Option 1 = True, Option 2 = False
 ```csv
 question,option_a,option_b,option_c,option_d,correct_answer
 "Python is a programming language",True,False,"","",a
-"HTML is a markup language",True,False,"","",a
+"HTML is a programming language",True,False,"","",b
 ```
+*Note: `correct_answer` is `a` when statement is True, `b` when statement is False*
 
 ### Regular MCQ (4 options):
 ```csv
@@ -46,7 +48,10 @@ For multi-answer MCQs, you can enter answers in any of these formats:
 
 **The order doesn't matter** - all formats above are treated as equivalent.
 
-For True/False questions, simply enter `1` for the first option or `2` for the second option.
+For True/False questions:
+- Enter `1` for True statements
+- Enter `2` for False statements  
+- Format is standardized: 1=True, 2=False across all True/False questions
 
 ## Storing Results 
 The results should be stored in the corresponding practice_decks folder. Multiple study sets are currently supported. 
