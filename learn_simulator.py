@@ -7,25 +7,10 @@ import random
 import difflib
 import sys
 
-# Safe print function for Windows console
-def safe_print(text):
-    """Print text safely, replacing problematic Unicode characters for Windows console"""
-    try:
-        print(text)
-    except UnicodeEncodeError:
-        # Replace Unicode symbols with ASCII equivalents
-        safe_text = text.replace('✓', 'OK').replace('✗', 'X').replace('📖', '[BOOK]').replace('🎓', '[GRAD]')
-        safe_text = safe_text.replace('→', '->').replace('←', '<-')
-        print(safe_text)
-
-# Color codes for terminal output
-class Colors:
-    GREEN = '\033[92m'    # Bright green for correct answers
-    RED = '\033[91m'      # Bright red for incorrect answers
-    YELLOW = '\033[93m'   # Yellow for hints
-    BLUE = '\033[94m'     # Blue for info
-    BOLD = '\033[1m'      # Bold text
-    RESET = '\033[0m'     # Reset to default color
+from question_handlers import (
+    Colors, safe_print,
+    TrueFalseHandler, McqSingleHandler, McqMultiHandler,
+)
 
 class LearnSimulator:
     def __init__(self, deck, filepath=None):
@@ -456,7 +441,8 @@ class LearnSimulator:
                 # Stage 2: Show question with multiple choices (easy mode for MCQ, definition to term for vocab)
                 print(f"[STAGE 2 - BASIC PRACTICE]")
                 if card.card_type == 'mcq':
-                    result = self._mcq_practice_mode(card)
+                    handler = self._get_handler_for(card)
+                    result = handler.ask(self, card)
                 else:
                     result = self._quiz_definition_to_term(card)
                 current_stage = 2
@@ -464,7 +450,8 @@ class LearnSimulator:
                 # Stage 3: Show question with multiple choices (for MCQ) or term to definition (for vocab)
                 print(f"[STAGE 3 - INTERMEDIATE PRACTICE]")
                 if card.card_type == 'mcq':
-                    result = self._mcq_practice_mode(card)
+                    handler = self._get_handler_for(card)
+                    result = handler.ask(self, card)
                 else:
                     result = self._quiz_term_to_definition(card)
                 current_stage = 3
@@ -472,7 +459,8 @@ class LearnSimulator:
                 # Stage 4: Advanced MCQ (no hints) or typing for vocab
                 print(f"[STAGE 4 - ADVANCED PRACTICE]")
                 if card.card_type == 'mcq':
-                    result = self._mcq_practice_mode(card, allow_hints=False)
+                    handler = self._get_handler_for(card)
+                    result = handler.ask(self, card, allow_hints=False)
                 else:
                     result = self._type_term_to_definition(card)
                 current_stage = 4
@@ -480,7 +468,8 @@ class LearnSimulator:
                 # Stage 5: Expert MCQ (no hints) or typing for vocab
                 print(f"[STAGE 5 - EXPERT PRACTICE]")
                 if card.card_type == 'mcq':
-                    result = self._mcq_practice_mode(card, allow_hints=False)
+                    handler = self._get_handler_for(card)
+                    result = handler.ask(self, card, allow_hints=False)
                 else:
                     result = self._type_definition_to_term(card)
                 current_stage = 5
@@ -957,8 +946,26 @@ class LearnSimulator:
             else:
                 print("Invalid input. Enter 1-5, 'h' for hint, or ESC.")
     
+    def _get_handler_for(self, card):
+        """Select the appropriate question handler based on card.question_kind."""
+        kind = card.question_kind
+        if kind == 'tf':
+            return TrueFalseHandler()
+        elif kind == 'mcq_multi':
+            return McqMultiHandler()
+        else:
+            return McqSingleHandler()
+
     def _mcq_practice_mode(self, card, allow_hints=True):
-        """MCQ practice mode: Show question with multiple choice options"""
+        """MCQ practice mode — delegates to the appropriate QuestionHandler.
+
+        Kept for backward compatibility.
+        """
+        handler = self._get_handler_for(card)
+        return handler.ask(self, card, allow_hints)
+
+    def _mcq_practice_mode_legacy(self, card, allow_hints=True):
+        """Original MCQ practice mode (retained as reference; unused)."""
         print(f"Question: {card.question}")
         
         # Check if multiple answers are expected

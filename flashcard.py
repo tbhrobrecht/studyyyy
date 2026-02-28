@@ -159,6 +159,20 @@ class Flashcard:
             return {k: v for k, v in options.items() if v is not None and str(v).strip()}
         return None
     
+    @property
+    def question_kind(self):
+        """Classify MCQ question type: 'tf', 'mcq_single', 'mcq_multi', or None (vocab)."""
+        if self.card_type != 'mcq':
+            return None
+        options = self.get_all_options()
+        if (len(options) == 2 and 'a' in options and 'b' in options
+                and len(self.correct_answers) == 1):
+            return 'tf'
+        elif len(self.correct_answers) > 1:
+            return 'mcq_multi'
+        else:
+            return 'mcq_single'
+
     def is_true_false_question(self):
         """Check if this is a True/False question (only options A and B)"""
         if self.card_type != 'mcq':
