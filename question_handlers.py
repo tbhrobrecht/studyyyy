@@ -211,7 +211,10 @@ class TrueFalseHandler(QuestionHandler):
         print(f"Question: {card.question}")
         print("Choose True or False:")
 
-        shuffled_letters, options, max_option = shuffle_options(card)
+        # Fixed order for TF: True is always 1, False always 2
+        options = card.get_all_options()
+        shuffled_letters = card.get_available_option_letters()  # sorted: ['a', 'b']
+        max_option = len(shuffled_letters)
         display_options(shuffled_letters, options)
         correct_set = card.get_correct_answers_set()
 

@@ -277,6 +277,10 @@ class LearnSimulator:
 
         print("Press ESC at any time to stop early and save progress.\n")
 
+        shuffle_choice = input("Shuffle question order? (y/n): ").strip().lower()
+        shuffle_questions = shuffle_choice in ('y', 'yes')
+        print()
+
         # Check if any card is still in Stage 1 (needs initial review)
         # Stage 1 condition: repetitions == 0 OR ease < 2.0
         if any(card.repetitions == 0 or card.ease < 2.0 for card in all_cards):
@@ -315,7 +319,7 @@ class LearnSimulator:
                 print(f"Set: {len(new_cards)} terms + {len(new_cards)} repeats = {len(current_set)} total")
 
                 # Study the set and track which cards were answered incorrectly
-                set_results = self._study_card_set_with_tracking(current_set)
+                set_results = self._study_card_set_with_tracking(current_set, shuffle_questions)
                 if set_results is None:  # User pressed ESC
                     return
                 
@@ -391,7 +395,7 @@ class LearnSimulator:
                 print(f"- Most difficult cards included: {len([c for c in current_set if c in hardest_cards])}")
 
                 # Study the set and track which cards were answered incorrectly
-                set_results = self._study_card_set_with_tracking(current_set)
+                set_results = self._study_card_set_with_tracking(current_set, shuffle_questions)
                 if set_results is None:  # User pressed ESC
                     return
                 
@@ -417,8 +421,10 @@ class LearnSimulator:
             self._display_session_summary()
             print("Session complete. Progress saved.")
 
-    def _study_card_set_with_tracking(self, card_set):
+    def _study_card_set_with_tracking(self, card_set, shuffle_questions=False):
         """Study a set of cards and return (completed_cards, incorrect_cards) or None if ESC pressed"""
+        if shuffle_questions:
+            card_set = random.sample(card_set, len(card_set))
         print("-" * 50)
         set_completed_cards = []
         incorrect_cards = []
