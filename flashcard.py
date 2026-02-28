@@ -3,7 +3,7 @@ import math
 
 class Flashcard:
     def __init__(self, term=None, definition=None, ease=2.5, interval=1, repetitions=0, last_review=None, formula=None, 
-                 question=None, option_a=None, option_b=None, option_c=None, option_d=None, correct_answer=None):
+                 question=None, option_a=None, option_b=None, option_c=None, option_d=None, correct_answer=None, explanation=None):
         # Vocabulary format fields
         self.term = term
         self.definition = definition
@@ -15,6 +15,7 @@ class Flashcard:
         self.option_b = option_b
         self.option_c = option_c
         self.option_d = option_d
+        self.explanation = explanation  # Add explanation for MCQ questions
         
         # Handle multiple correct answers (can be 'a', 'a,b', 'a,c,d', etc.)
         if correct_answer and isinstance(correct_answer, str):
@@ -103,6 +104,7 @@ class Flashcard:
                 "option_c": self.option_c,
                 "option_d": self.option_d,
                 "correct_answer": self.correct_answer,
+                "explanation": self.explanation if hasattr(self, 'explanation') and self.explanation else "",
                 "ease": round(self.ease, 3),  # Round to 3 decimal places for precision
                 "repetitions": self.repetitions,
                 "last_review": self.last_review.strftime('%Y-%m-%d') if self.last_review else None

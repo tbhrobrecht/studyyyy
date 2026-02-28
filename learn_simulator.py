@@ -56,6 +56,7 @@ class LearnSimulator:
                             option_c=row['option_c'],
                             option_d=row['option_d'],
                             correct_answer=row['correct_answer'],
+                            explanation=row.get('explanation', ''),
                             ease=float(row.get('ease', 2.5)),
                             interval=1,  # Default interval since we're removing this from CSV
                             repetitions=int(row.get('repetitions', 0)),
@@ -83,7 +84,7 @@ class LearnSimulator:
         with open(filepath, 'w', newline='', encoding='utf-8') as f:
             # Determine format based on first card
             if self.cards and self.cards[0].card_type == 'mcq':
-                fieldnames = ['question', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer', 'ease', 'repetitions', 'last_review']
+                fieldnames = ['question', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer', 'explanation', 'ease', 'repetitions', 'last_review']
             else:
                 # Check if any cards have formulas to determine fieldnames
                 has_formulas = any(hasattr(card, 'formula') and card.formula for card in self.cards)
@@ -981,15 +982,19 @@ class LearnSimulator:
         correct_answers_set = card.get_correct_answers_set()
         available_letters = card.get_available_option_letters()
         
-        # Display options with numbers (dynamic based on available options)
-        for i, letter in enumerate(available_letters, 1):
+        # Randomize the order of options
+        shuffled_letters = available_letters.copy()
+        random.shuffle(shuffled_letters)
+        
+        # Display options in randomized order with numbers
+        for i, letter in enumerate(shuffled_letters, 1):
             print(f"{i}. {options[letter]}")
         
         # Get user input with timing
         start_time = time.time()
         used_hint = False
         response_time = None
-        max_option = len(available_letters)
+        max_option = len(shuffled_letters)
         available_options = list(range(1, max_option + 1))
         
         while True:
@@ -1030,14 +1035,14 @@ class LearnSimulator:
                 # Handle hint for multiple choice
                 if user_input.lower() == 'h' and allow_hints and not used_hint:
                     # Remove some wrong options for hint
-                    wrong_numbers = [i+1 for i, letter in enumerate(available_letters) 
+                    wrong_numbers = [i+1 for i, letter in enumerate(shuffled_letters) 
                                    if letter not in correct_answers_set and i+1 in available_options]
                     numbers_to_remove = random.sample(wrong_numbers, min(max(1, len(wrong_numbers)//2), len(wrong_numbers)))
                     available_options = [num for num in available_options if num not in numbers_to_remove]
                     
                     print("\nHint used! Here are the remaining options:")
                     for num in available_options:
-                        letter = available_letters[num - 1]
+                        letter = shuffled_letters[num - 1]
                         print(f"{num}. {options[letter]}")
                     used_hint = True
                     start_time = time.time()
@@ -1066,7 +1071,7 @@ class LearnSimulator:
                         continue
                         
                     response_time = time.time() - start_time
-                    selected_letters = [available_letters[num - 1] for num in selected_numbers]
+                    selected_letters = [shuffled_letters[num - 1] for num in selected_numbers]
                     
                     # Calculate partial score
                     score, is_perfect, feedback = card.calculate_partial_score(selected_letters)
@@ -1075,10 +1080,12 @@ class LearnSimulator:
                     if is_perfect:
                         if used_hint:
                             safe_print(f"{Colors.YELLOW}✓ Perfect (with hint): {user_input}. Score: 100%{Colors.RESET}")
-                            return "hint_correct", response_time
                         else:
                             safe_print(f"{Colors.GREEN}✓ Perfect: {user_input}. Score: 100%{Colors.RESET}")
-                            return True, response_time
+                        # Show explanation if available
+                        if hasattr(card, 'explanation') and card.explanation:
+                            safe_print(f"{Colors.BLUE}📖 Explanation: {card.explanation}{Colors.RESET}")
+                        return "hint_correct" if used_hint else True, response_time
                     elif score > 0:
                         score_percent = int(score * 100)
                         color = Colors.YELLOW if score >= 0.5 else Colors.RED
@@ -1086,21 +1093,28 @@ class LearnSimulator:
                         
                         # Show detailed feedback
                         if feedback['correctly_selected'] > 0:
-                            correct_nums = [available_letters.index(ans) + 1 for ans in feedback['correct_answers'] if ans in selected_letters]
+                            correct_nums = [shuffled_letters.index(ans) + 1 for ans in feedback['correct_answers'] if ans in selected_letters]
                             safe_print(f"  ✓ Correct: {', '.join(map(str, correct_nums))}")
                         if feedback['wrong_answers']:
-                            wrong_nums = [available_letters.index(ans) + 1 for ans in feedback['wrong_answers']]
+                            wrong_nums = [shuffled_letters.index(ans) + 1 for ans in feedback['wrong_answers']]
                             safe_print(f"  ✗ Incorrect: {', '.join(map(str, wrong_nums))}")
                         if feedback['missed_answers']:
-                            missed_nums = [available_letters.index(ans) + 1 for ans in feedback['missed_answers']]
+                            missed_nums = [shuffled_letters.index(ans) + 1 for ans in feedback['missed_answers']]
                             safe_print(f"  ○ Missed: {', '.join(map(str, missed_nums))}")
+                        
+                        # Show explanation if available
+                        if hasattr(card, 'explanation') and card.explanation:
+                            safe_print(f"{Colors.BLUE}📖 Explanation: {card.explanation}{Colors.RESET}")
                         
                         # Return partial score as a special value
                         return ("partial", score), response_time
                     else:
                         safe_print(f"{Colors.RED}✗ Incorrect: {user_input}. Score: 0%{Colors.RESET}")
-                        correct_nums = [available_letters.index(ans) + 1 for ans in feedback['correct_answers']]
+                        correct_nums = [shuffled_letters.index(ans) + 1 for ans in feedback['correct_answers']]
                         print(f"The correct answers were: {', '.join(map(str, correct_nums))}")
+                        # Show explanation if available
+                        if hasattr(card, 'explanation') and card.explanation:
+                            safe_print(f"{Colors.BLUE}📖 Explanation: {card.explanation}{Colors.RESET}")
                         return False, response_time
                         
                 except ValueError:
@@ -1120,33 +1134,38 @@ class LearnSimulator:
                     choice_num = int(key.decode())
                     if choice_num in available_options:
                         response_time = time.time() - start_time
-                        choice_letter = available_letters[choice_num - 1]
+                        choice_letter = shuffled_letters[choice_num - 1]
                         
                         if choice_letter in correct_answers_set:
                             if used_hint:
                                 print(f"{Colors.YELLOW}✓ Correct (with hint): {choice_num}. {options[choice_letter]}{Colors.RESET}")
-                                return "hint_correct", response_time
                             else:
                                 print(f"{Colors.GREEN}✓ Correct: {choice_num}. {options[choice_letter]}{Colors.RESET}")
-                                return True, response_time
+                            # Show explanation if available
+                            if hasattr(card, 'explanation') and card.explanation:
+                                print(f"{Colors.BLUE}📖 Explanation: {card.explanation}{Colors.RESET}")
+                            return "hint_correct" if used_hint else True, response_time
                         else:
                             print(f"{Colors.RED}✗ Incorrect! You selected: {choice_num}. {options[choice_letter]}{Colors.RESET}")
-                            correct_nums = [available_letters.index(ans) + 1 for ans in correct_answers_set]
+                            correct_nums = [shuffled_letters.index(ans) + 1 for ans in correct_answers_set]
                             print(f"The correct answer was: {', '.join(map(str, correct_nums))}")
+                            # Show explanation if available
+                            if hasattr(card, 'explanation') and card.explanation:
+                                print(f"{Colors.BLUE}📖 Explanation: {card.explanation}{Colors.RESET}")
                             return False, response_time
                     else:
                         print(f"Option {choice_num} not available.")
                         
                 elif key.lower() == b'h' and allow_hints and not used_hint:
                     # For single MCQ, show a hint by eliminating wrong options
-                    wrong_numbers = [i+1 for i, letter in enumerate(available_letters) 
+                    wrong_numbers = [i+1 for i, letter in enumerate(shuffled_letters) 
                                    if letter not in correct_answers_set and i+1 in available_options]
                     numbers_to_remove = random.sample(wrong_numbers, min(max(1, len(wrong_numbers)//2), len(wrong_numbers)))
                     available_options = [num for num in available_options if num not in numbers_to_remove]
                     
                     print("\nHint used! Here are the remaining options:")
                     for num in available_options:
-                        letter = available_letters[num - 1]
+                        letter = shuffled_letters[num - 1]
                         print(f"{num}. {options[letter]}")
                     used_hint = True
                     start_time = time.time()  # Restart timing after hint
